@@ -1,0 +1,3 @@
+#+TITLE: A shopping list.
+
+An optimum project for sharing a shopping list between opti-friends.
