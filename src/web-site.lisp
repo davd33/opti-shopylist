@@ -5,16 +5,26 @@
      (let ((spinneret:*html* out))
        ,@body)))
 
-(defvar *constitution-1958* nil)
+(define-condition redirect (snooze:http-condition)
+  ((location :initarg :location :accessor location))
+  (:default-initargs :status-code 303))
 
 ;;; HOME OF WEBSITE
 
+(defvar shopping-list '())
+(defvar connected-users '())
+
+(defroute shopping-list
+  (:get "text/html")
+  "The shopping list")
+
+(defgenpath shopping-list shopping-list-path)
+
 (defroute secret-login
   (:post "application/x-www-form-urlencoded")
-  (let ((payload (payload-as-string)))
-    (format t "~%WE CALLED POST~%~%" )
-    (format t "~%~A~%" payload))
-  "hello world")
+  (let* ((payload (payload-as-string))
+         (password (second (str:split "=" payload))))
+    (signal 'redirect :location (shopping-list-path))))
 
 (defroute secret-login
   (:get "text/html")

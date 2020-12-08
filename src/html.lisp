@@ -53,6 +53,7 @@ One solely password for each instance of the website."
      :method "POST"
      (:input
       :type "password"
+      :name "password"
       :placeholder "Enter the Opti-password!")
      (:input
       :type "submit"))
