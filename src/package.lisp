@@ -43,5 +43,4 @@
 
 (defpackage #:web-site
   (:use #:cl #:snooze #:jsons #:alexandria)
-  (:export #:home
-           #:set-constitution-1958))
+  (:export #:shopping-list))

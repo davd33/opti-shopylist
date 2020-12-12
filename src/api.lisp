@@ -5,7 +5,7 @@
 ;; START HTTP SERVER
 (defclass snooze-acceptor (hunchentoot:easy-acceptor) ())
 
-(defparameter *lispdoc-dispatch-table*
+(defparameter *dispatch-table*
   (list
    (hunchentoot:create-folder-dispatcher-and-handler
     "/images/" (fad:pathname-as-directory (resource "images")))
@@ -13,10 +13,10 @@
     "/css/" (fad:pathname-as-directory (resource "css")))
    (hunchentoot:create-folder-dispatcher-and-handler
     "/webfonts/" (fad:pathname-as-directory (resource "webfonts")))
-   (make-hunchentoot-app '((*home-resource* . web-site:home)))))
+   (make-hunchentoot-app '((*home-resource* . web-site:shopping-list)))))
 
 (defmethod hunchentoot:acceptor-dispatch-request :around ((a snooze-acceptor) request)
-  (let ((hunchentoot:*dispatch-table* *lispdoc-dispatch-table*))
+  (let ((hunchentoot:*dispatch-table* *dispatch-table*))
     (call-next-method)))
 
 (defvar *server* nil)
