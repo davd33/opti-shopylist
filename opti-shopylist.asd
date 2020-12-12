@@ -6,26 +6,41 @@
   :license  "GPLv3"
   :version "0.0.1"
   :serial t
-  :depends-on (#:spinneret
+  :depends-on (;; HTML / HTTP Routes
+               #:spinneret
                #:hunchentoot
                #:snooze
-               #:quri
-               #:dexador
-               #:lquery
-               #:cl-ppcre
-               #:cl-json
                #:clack
-               #:fset
+               ;; URI deserialize
+               #:quri
+               ;; Make HTTP requests
+               #:dexador
+               ;; CL jQuery for HTML strings
+               #:lquery
+               ;; Basics
+               #:cl-ppcre               ; Regex
+               #:cl-json
+               #:fset                   ; Functional data structures
                #:str
+               #:trivia                 ; Pattern matching
+               #:alexandria
+               ;; Database
                #:mito
                #:sxql
+               ;; Programs options
                #:unix-opts
-               #:trivia
-               #:alexandria
-               #:closer-mop)
+               ;; OOP extensions
+               #:closer-mop
+               ;; JWT Generation
+               #:cljwt-custom
+               ;;#:ironclad               ; Crypto functions
+               ;;#:cl-base64              ; (Part of CL)
+               ;;#:flexi-stream           ; Bivalent streams
+               )
   :components ((:module "src"
                 :components
                 ((:file "package")
+                 (:file "hm")
                  (:file "resources")
                  (:file "mop")
                  (:file "jsons")

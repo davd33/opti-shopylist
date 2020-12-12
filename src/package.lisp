@@ -6,6 +6,18 @@
            #:deep-acons
            #:merge-acons))
 
+(defpackage #:hm
+  (:use #:cl)
+  (:shadow #:get
+           #:reduce
+           #:first)
+  (:export #:put
+           #:get
+           #:one
+           #:reduce
+           #:print-elt
+           #:print-all))
+
 (defpackage #:mop
   (:use #:cl #:alexandria)
   (:export #:make-mapper

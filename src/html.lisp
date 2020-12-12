@@ -45,10 +45,13 @@ for a translation split into a list of several strings.
            ,@(cdadr for)
            :initial-value `(progn)))
 
-(defun secret-login ()
+(defun secret-login (login-error)
   "There is a common password for all optimums.
 One solely password for each instance of the website."
   (with-page (:title *page-title* :image-path nil)
+    (:p
+     :style "color: red;"
+     login-error)
     (:form
      :method "POST"
      (:input
