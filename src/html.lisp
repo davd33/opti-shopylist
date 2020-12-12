@@ -61,3 +61,12 @@ One solely password for each instance of the website."
      (:input
       :type "submit"))
     ))
+
+(defun shopping-list (signout-path)
+  "Manage the shopping list and log out."
+  (with-page (:title *page-title* :image-path nil)
+    (:p
+     "You're logged-in, but you may well "
+     (:a :href signout-path
+         " sign out ")
+     " too! (if you want)")))

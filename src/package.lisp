@@ -51,7 +51,8 @@
 
 (defpackage #:html
   (:use #:cl #:spinneret #:alexandria)
-  (:export #:secret-login))
+  (:export #:secret-login
+           #:shopping-list))
 
 (defpackage #:web-site
   (:use #:cl #:snooze #:jsons #:alexandria)

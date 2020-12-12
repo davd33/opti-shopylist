@@ -9,46 +9,7 @@
 html, body {
     margin: 0 auto;
     min-height: 100%;
-    color: #22;
+    color: lightblue;
+    background: darkred;
     text-shadow: 1px 1px;
-}
-
-.container {
-    width: 1000px;
-    margin: auto;
-    border: 2px
-    box-shadow: 2px 2px 0 #594302;
-    background: white;
-    opacity: .8;
-    padding: 0 10px;
-}
-
-.action > p {
-    font-size: 1.5em;
-    text-emphasis: italic;
-}
-
-.action a, .action a:visited {
-    font-size: .8em;
-    color: white;
-    text-decoration: overline;
-}
-
-.action a:hover {
-    color: darkred;
-}
-
-.story > p {
-    font-size: 1.5em;
-    text-align: justify;
-}
-
-.story > .action-buttons a, .story > .action-buttons a:visited {
-    font-size: 1.2em;
-    color: white;
-    text-decoration: overline;
-}
-
-.story > .action-buttons a:hover {
-    color: darkred;
 }
