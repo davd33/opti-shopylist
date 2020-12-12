@@ -1,9 +1,17 @@
 (in-package #:web-site)
 
+;; --- UTILS
+
 (defmacro build-spinneret-html-response (&body body)
   `(with-output-to-string (out)
      (let ((spinneret:*html* out))
        ,@body)))
+
+(defun gen-token ()
+  "Generate a new user token."
+  (str:concat *token-cookie-name* "_" (write-to-string (get-universal-time))))
+
+;; --- REDIRECTS
 
 (define-condition redirect (snooze:http-condition)
   ((location :initarg :location :accessor location))
@@ -102,7 +110,7 @@
   (let* ((payload (payload-as-string))
          (password (second (str:split "=" payload)))
          (my-token (when (string= password *opti-password*)
-                     "opti-token")) ; todo generate JWT
+                     (gen-token))) ; todo generate JWT
          (expire-time (* 2 (+ 60 (get-universal-time))))
          )
 
