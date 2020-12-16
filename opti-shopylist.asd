@@ -27,6 +27,8 @@
                ;; Database
                #:mito
                #:sxql
+               ;; Async
+               #:lparallel
                ;; Programs options
                #:unix-opts
                ;; OOP extensions
@@ -42,8 +44,8 @@
                 ((:file "package")
                  (:file "hm")
                  (:file "resources")
-                 (:file "mop")
-                 (:file "jsons")
+                 ;;(:file "mop")
+                 ;;(:file "jsons") ; needs mop
                  (:file "opti-shopylist")
                  (:file "api")
                  (:file "html")

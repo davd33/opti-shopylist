@@ -1,6 +1,6 @@
 (in-package #:web-site)
 
-;; --- UTILS
+;;; --- UTILS
 
 (defmacro build-spinneret-html-response (&body body)
   `(with-output-to-string (out)
@@ -11,7 +11,7 @@
   "Generate a new user token."
   (str:concat *token-cookie-name* "_" (write-to-string (get-universal-time))))
 
-;; --- REDIRECTS
+;;; --- REDIRECTS
 
 (define-condition redirect (snooze:http-condition)
   ((location :initarg :location :accessor location))
@@ -27,16 +27,21 @@
   (setf (hunchentoot:header-out :location) (location c))
   (format nil "See here: ~a" (location c)))
 
-;; --- CONFIGURATION
+;;; --- CONFIGURATION
 
 (defparameter *token-cookie-name* "OPTI-TOKEN"
   "The name of the cookie used to identified a logged-in user.")
 
-(defparameter *opti-password* "opti-password"
+(defparameter *opti-password* (or (uiop:getenv "OPTIPASSWD") "OPTI-PASSWORD")
   "Password for accessing the shopping list.")
 
 (defvar *shopping-list* '()
   "List of items to buy.")
+
+(defvar *connected-users* '()
+  "Every CONNECTED-USER of the shopping list.")
+
+;;; --- TYPES
 
 (defstruct (connected-user (:constructor mk-connected-user
                                (token expire-time)))
@@ -46,10 +51,7 @@
   token
   expire-time)
 
-(defvar *connected-users* '()
-  "Every CONNECTED-USER of the shopping list.")
-
-;; --- DEFINE RESOURCES
+;;; --- DEFINE RESOURCES
 
 (defresource shopping-list (verb ct) (:genpath shopping-list-path))
 
@@ -57,7 +59,7 @@
 
 (defresource sign-out (verb ct &key user-token) (:genpath signout-path))
 
-;; --- SIGN OUTgoing
+;;; --- SIGN OUTgoing
 
 (defroute sign-out
   (:get "text/html" &key user-token)
@@ -76,7 +78,7 @@
 
   (redirect (secret-login-path)))
 
-;; --- SHOPPING LIST
+;;; --- SHOPPING LIST
 
 (defroute shopping-list
   (:get "text/html")
@@ -97,7 +99,7 @@
     (build-spinneret-html-response
       (html:shopping-list (signout-path :user-token req-token)))))
 
-;; --- SECRET LOGIN
+;;; --- SECRET LOGIN
 
 (defroute secret-login
   (:get "text/html" &key login-error)

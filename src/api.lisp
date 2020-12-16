@@ -22,11 +22,14 @@
 (defvar *server* nil)
 
 (defun stop ()
-  (when *server* (hunchentoot:stop *server*) (setq *server* nil)))
+  (when *server*
+    (hunchentoot:stop *server*)
+    (setq *server* nil)))
 
 (defun start (&key (port 5000))
   "Start the HTTP server"
-  (stop)
-  (setq *server*
-        (hunchentoot:start (make-instance 'snooze-acceptor :port port)))
-  (format t "~%Program started: Open now the following URL in your web browser: http://localhost:~A~2%" port))
+  (setf lparallel:*kernel* (lparallel:make-kernel 4))
+  (lparallel:future
+    (setf *server*
+        (hunchentoot:start (make-instance 'snooze-acceptor :port port))))
+  (format t "~%http://localhost:~A~2%" port))
