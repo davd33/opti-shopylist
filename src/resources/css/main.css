@@ -9,7 +9,75 @@
 html, body {
     margin: 0 auto;
     min-height: 100%;
+
     color: lightblue;
     background: darkred;
-    text-shadow: 1px 1px;
+}
+
+input, select, textarea {
+    font-size: 80%;
+}
+
+.error-msg {
+    color: red;
+}
+
+.info-msg {
+    color: lightblue
+}
+
+#login {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    align-items: flex-end;
+    justify-content: center;
+    font-size: 2em;
+}
+
+#login > .login-form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+#signout {
+    text-align: center;
+    background: black;
+    padding: 10px;
+    box-shadow: 0 0 5px black;
+}
+
+.shopping-list-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 2em;
+    font-size: 1.5em;
+}
+
+.shopping-list-container .shopping-list {
+    list-style: none;
+    width: 100%;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.shopping-list-container .shopping-list .item form {
+    display: inline-block;
+    background: transparent;
+}
+
+.shopping-list-container .shopping-list .item form input[type=submit]:hover {
+    color: yellow;
+}
+
+.shopping-list-container .shopping-list .item form input[type=submit] {
+    background: transparent;
+    border: 0;
+    font-weight: lighter;
+    color: gold;
+    cursor: pointer;
 }

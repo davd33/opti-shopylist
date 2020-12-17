@@ -49,24 +49,63 @@ for a translation split into a list of several strings.
   "There is a common password for all optimums.
 One solely password for each instance of the website."
   (with-page (:title *page-title* :image-path nil)
-    (:p
-     :style "color: red;"
-     login-error)
-    (:form
-     :method "POST"
-     (:input
-      :type "password"
-      :name "password"
-      :placeholder "Enter the Opti-password!")
-     (:input
-      :type "submit"))
+    (:div
+     :id "login"
+     (:div
+      :class "login-form"
+      (:p
+       :class (if login-error "error-msg" "info-msg")
+       (or login-error "Please give the password:"))
+      (:form
+       :method "POST"
+       (:input
+        :type "password"
+        :name "password"
+        :placeholder "...here")
+       (:input
+        :type "submit"
+        :value "Go"))))
     ))
 
-(defun shopping-list (signout-path)
+(defun shopping-list (signout-path shopping-list)
   "Manage the shopping list and log out."
   (with-page (:title *page-title* :image-path nil)
-    (:p
-     "You're logged-in, but you may well "
-     (:a :href signout-path
-         " sign out ")
-     " too! (if you want)")))
+    (:div
+     (:div
+      :id "signout"
+      (:p
+       "You're logged-in, but you may well "
+       (:a :href signout-path
+           "sign out")
+       " too! (if you want)"))
+     (:div
+      :class "shopping-list-container"
+      (:div
+       :class "shopping-list-add"
+       (:form
+        :method "POST"
+        (:input
+         :type "text"
+         :name "product-name"
+         :placeholder "What..."
+         :autocomplete "off")
+        (:input :type "hidden"
+                :name "action"
+                :value "ADD")
+        (:input
+         :type "submit"
+         :value "Add")))
+      (:ul
+       :class "shopping-list"
+       (dolist (item shopping-list)
+         (:li
+          :class "item"
+          (:form :method "POST"
+                 (:input :type "hidden"
+                         :name "product-name"
+                         :value item)
+                 (:input :type "hidden"
+                         :name "action"
+                         :value "DELETE")
+                 (:input :type "submit" :value "[del]"))
+          item)))))))

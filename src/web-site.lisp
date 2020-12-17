@@ -81,6 +81,20 @@
 ;;; --- SHOPPING LIST
 
 (defroute shopping-list
+  (:post "application/x-www-form-urlencoded")
+  (let* ((payload (quri:url-decode-params (payload-as-string)))
+         (product-name (cdr (assoc "product-name" payload :test #'string=)))
+         (action (cdr (assoc "action" payload :test #'string=))))
+
+    (cond ((string= "ADD" action)
+           (setf *shopping-list*
+                 (adjoin product-name *shopping-list* :test #'string=)))
+          ((string= "DELETE" action)
+           (setf *shopping-list*
+                 (set-difference *shopping-list* (list product-name) :test #'string=))))
+    (redirect (shopping-list-path))))
+
+(defroute shopping-list
   (:get "text/html")
   (let* ((req-token (hunchentoot:cookie-in *token-cookie-name*))
          (found-cuser (find req-token *connected-users*
@@ -97,7 +111,8 @@
            (redirect (secret-login-path :login-error "Your session has expired!"))))
 
     (build-spinneret-html-response
-      (html:shopping-list (signout-path :user-token req-token)))))
+      (html:shopping-list (signout-path :user-token req-token)
+                          *shopping-list*))))
 
 ;;; --- SECRET LOGIN
 
