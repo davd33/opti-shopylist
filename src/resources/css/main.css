@@ -18,8 +18,21 @@ input, select, textarea {
     font-size: 80%;
 }
 
+input[type=submit]:hover {
+    color: yellow;
+}
+
+input[type=submit] {
+    background: transparent;
+    border: 0;
+    font-weight: lighter;
+    color: gold;
+    cursor: pointer;
+}
+
 .error-msg {
     color: red;
+    text-align: center;
 }
 
 .info-msg {
@@ -32,7 +45,7 @@ input, select, textarea {
     min-height: 100vh;
     align-items: flex-end;
     justify-content: center;
-    font-size: 2em;
+    font-size: 5em;
 }
 
 #login > .login-form {
@@ -47,6 +60,7 @@ input, select, textarea {
     background: black;
     padding: 10px;
     box-shadow: 0 0 5px black;
+    font-size: 2em;
 }
 
 .shopping-list-container {
@@ -54,7 +68,7 @@ input, select, textarea {
     flex-direction: column;
     align-items: center;
     margin-top: 2em;
-    font-size: 1.5em;
+    font-size: 4em;
 }
 
 .shopping-list-container .shopping-list {
@@ -68,16 +82,4 @@ input, select, textarea {
 .shopping-list-container .shopping-list .item form {
     display: inline-block;
     background: transparent;
-}
-
-.shopping-list-container .shopping-list .item form input[type=submit]:hover {
-    color: yellow;
-}
-
-.shopping-list-container .shopping-list .item form input[type=submit] {
-    background: transparent;
-    border: 0;
-    font-weight: lighter;
-    color: gold;
-    cursor: pointer;
 }

@@ -56,4 +56,7 @@
 
 (defpackage #:web-site
   (:use #:cl #:snooze #:jsons #:alexandria)
-  (:export #:shopping-list))
+  (:export #:shopping-list
+           #:shopping-item-name
+           #:shopping-item-timestamp
+           #:shopping-item-bought))

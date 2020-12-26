@@ -84,17 +84,17 @@ One solely password for each instance of the website."
        :class "shopping-list-add"
        (:form
         :method "POST"
-        (:input
-         :type "text"
-         :name "product-name"
-         :placeholder "What..."
-         :autocomplete "off")
+        (:input :type "text"
+                :name "product-name"
+                :placeholder "What..."
+                :autocomplete "off"
+                :required
+                :autofocus)
         (:input :type "hidden"
                 :name "action"
                 :value "ADD")
-        (:input
-         :type "submit"
-         :value "Add")))
+        (:input :type "submit"
+                :value "Add")))
       (:ul
        :class "shopping-list"
        (dolist (item shopping-list)
@@ -103,9 +103,9 @@ One solely password for each instance of the website."
           (:form :method "POST"
                  (:input :type "hidden"
                          :name "product-name"
-                         :value item)
+                         :value (web-site:shopping-item-name item))
                  (:input :type "hidden"
                          :name "action"
                          :value "DELETE")
                  (:input :type "submit" :value "[del]"))
-          item)))))))
+          (web-site:shopping-item-name item))))))))

@@ -43,6 +43,12 @@
 
 ;;; --- TYPES
 
+(defstruct shopping-item
+  "An item of the shopping list - something to buy or already bought."
+  timestamp
+  name
+  bought)
+
 (defstruct (connected-user (:constructor mk-connected-user
                                (token expire-time)))
   "A connected user represents someone of us that has used the right
@@ -73,8 +79,7 @@
                           :value nil
                           :expires 0
                           :max-age 0
-                          :path "/"
-                          :domain "localhost")
+                          :path "/")
 
   (redirect (secret-login-path)))
 
@@ -84,14 +89,18 @@
   (:post "application/x-www-form-urlencoded")
   (let* ((payload (quri:url-decode-params (payload-as-string)))
          (product-name (cdr (assoc "product-name" payload :test #'string=)))
+         (item (make-shopping-item :name product-name
+                                   :timestamp (get-universal-time)))
          (action (cdr (assoc "action" payload :test #'string=))))
 
     (cond ((string= "ADD" action)
            (setf *shopping-list*
-                 (adjoin product-name *shopping-list* :test #'string=)))
+                 (adjoin item *shopping-list* :key (compose #'str:upcase #'shopping-item-name) :test #'string=)))
           ((string= "DELETE" action)
-           (setf *shopping-list*
-                 (set-difference *shopping-list* (list product-name) :test #'string=))))
+           (let ((item (find product-name *shopping-list* :key #'shopping-item-name :test #'string=)))
+             (setf (shopping-item-bought item)
+                   t))))
+
     (redirect (shopping-list-path))))
 
 (defroute shopping-list
@@ -143,7 +152,6 @@
           (hunchentoot:set-cookie *token-cookie-name*
                                   :value my-token
                                   :expires expire-time
-                                  :path "/"
-                                  :domain "localhost")
+                                  :path "/")
 
           (redirect (shopping-list-path))))))
