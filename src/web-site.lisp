@@ -63,6 +63,21 @@
   token
   expire-time)
 
+;;; --- FUNCTIONAL FEATURES
+
+(defun shopping-item< (item1 item2)
+  "Does ITEM1 have more visibility than ITEM2?"
+  (let ((bought1 (shopping-item-bought item1))
+        (bought2 (shopping-item-bought item2))
+        (time1 (shopping-item-timestamp item1))
+        (time2 (shopping-item-timestamp item2)))
+    (cond ((and bought1 bought2)
+           (> time1 time2))
+          ((and (null bought1) (null bought2))
+           (> time1 time2))
+          (t
+           (and (null bought1) bought2)))))
+
 ;;; --- DEFINE RESOURCES
 
 (defresource shopping-list (verb ct) (:genpath shopping-list-path))
@@ -110,7 +125,7 @@
                        t)))))
 
     (setf *shopping-list*
-          (sort *shopping-list* #'> :key #'shopping-item-timestamp))
+          (stable-sort *shopping-list* #'shopping-item<))
 
     (redirect (shopping-list-path))))
 
