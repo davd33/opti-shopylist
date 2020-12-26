@@ -63,6 +63,10 @@ input[type=submit] {
     font-size: 2em;
 }
 
+#signout a {
+    color: lightblue;
+}
+
 .shopping-list-container {
     display: flex;
     flex-direction: column;
