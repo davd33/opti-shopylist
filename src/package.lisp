@@ -59,4 +59,7 @@
   (:export #:shopping-list
            #:shopping-item-name
            #:shopping-item-timestamp
-           #:shopping-item-bought))
+           #:shopping-item-bought
+           #:*set-not-bought*
+           #:*set-bought*
+           #:*add-shopping-item*))

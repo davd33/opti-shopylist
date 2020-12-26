@@ -41,6 +41,12 @@
 (defvar *connected-users* '()
   "Every CONNECTED-USER of the shopping list.")
 
+(defparameter *set-not-bought* "SET_NOT_BOUGHT")
+
+(defparameter *set-bought* "SET_BOUGHT")
+
+(defparameter *add-shopping-item* "ADD_SHOPPING_ITEM")
+
 ;;; --- TYPES
 
 (defstruct shopping-item
@@ -93,13 +99,18 @@
                                    :timestamp (get-universal-time)))
          (action (cdr (assoc "action" payload :test #'string=))))
 
-    (cond ((string= "ADD" action)
+    (cond ((string= *add-shopping-item* action)
            (setf *shopping-list*
                  (adjoin item *shopping-list* :key (compose #'str:upcase #'shopping-item-name) :test #'string=)))
-          ((string= "DELETE" action)
+          ((or (string= *set-not-bought* action) (string= *set-bought* action))
            (let ((item (find product-name *shopping-list* :key #'shopping-item-name :test #'string=)))
              (setf (shopping-item-bought item)
-                   t))))
+                   (if (string= *set-not-bought* action)
+                       nil
+                       t)))))
+
+    (setf *shopping-list*
+          (sort *shopping-list* #'> :key #'shopping-item-timestamp))
 
     (redirect (shopping-list-path))))
 
