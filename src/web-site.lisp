@@ -47,6 +47,8 @@
 
 (defparameter *add-shopping-item* "ADD_SHOPPING_ITEM")
 
+(defparameter *remove-shopping-item* "REMOVE_SHOPPING_ITEM")
+
 ;;; --- TYPES
 
 (defstruct shopping-item
@@ -117,6 +119,9 @@
     (cond ((string= *add-shopping-item* action)
            (setf *shopping-list*
                  (adjoin item *shopping-list* :key (compose #'str:upcase #'shopping-item-name) :test #'string=)))
+          ((string= *remove-shopping-item* action)
+           (setf *shopping-list*
+                 (remove product-name *shopping-list* :test #'string= :key #'shopping-item-name)))
           ((or (string= *set-not-bought* action) (string= *set-bought* action))
            (let ((item (find product-name *shopping-list* :key #'shopping-item-name :test #'string=)))
              (setf (shopping-item-bought item)

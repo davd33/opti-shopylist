@@ -62,4 +62,5 @@
            #:shopping-item-bought
            #:*set-not-bought*
            #:*set-bought*
-           #:*add-shopping-item*))
+           #:*add-shopping-item*
+           #:*remove-shopping-item*))

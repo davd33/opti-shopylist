@@ -106,10 +106,18 @@ One solely password for each instance of the website."
                          :value (web-site:shopping-item-name item))
                  (:input :type "hidden"
                          :name "action"
+                         :value web-site:*remove-shopping-item*)
+                 (:input :type "submit" :value "☠"))
+          (:form :method "POST"
+                 (:input :type "hidden"
+                         :name "product-name"
+                         :value (web-site:shopping-item-name item))
+                 (:input :type "hidden"
+                         :name "action"
                          :value (if (web-site:shopping-item-bought item)
                                     web-site:*set-not-bought*
                                     web-site:*set-bought*))
                  (:input :type "submit" :value (if (web-site:shopping-item-bought item)
                                                    "☑"
-                                                   "☐")))
-          (web-site:shopping-item-name item))))))))
+                                                   "☐"))
+                 (:input :type "submit" :class "shopping-item-text" :value (web-site:shopping-item-name item))))))))))

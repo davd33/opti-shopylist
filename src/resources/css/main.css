@@ -87,3 +87,10 @@ input[type=submit] {
     display: inline-block;
     background: transparent;
 }
+
+.shopping-item-text {
+    color: white;
+}
+
+.shopping-item-text:hover {
+}
