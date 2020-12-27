@@ -88,9 +88,6 @@ input[type=submit] {
     background: transparent;
 }
 
-.shopping-item-text {
+.shopping-list-container .shopping-list .item form .shopping-item-text {
     color: white;
-}
-
-.shopping-item-text:hover {
 }
