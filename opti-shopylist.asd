@@ -48,6 +48,11 @@
                  ;;(:file "jsons") ; needs mop
                  (:file "opti-shopylist")
                  (:file "api")
+                 (:file "db")
+                 (:file "models")
+                 (:file "shopping-interface")
+                 (:file "shopping-mem-impl")
+                 (:file "shopping-db-impl")
                  (:file "html")
                  (:file "web-site"))))
   :in-order-to ((test-op (test-op "opti-shopylist/tests"))))

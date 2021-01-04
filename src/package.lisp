@@ -60,19 +60,45 @@
            #:status
            #:connect))
 
+(defpackage #:models
+  (:use #:cl)
+  (:export #:shopping-item-name
+           #:shopping-item-timestamp
+           #:shopping-item-bought
+           #:shopping-item
+           #:make-shopping-item))
+
+(defpackage #:shopping-interface
+  (:use #:cl)
+  (:export #:add-shopping-item
+           #:remove-shopping-item
+           #:set-item-bought
+           #:get-all))
+
+(defpackage #:shopping-mem-impl
+  (:use #:cl #:alexandria #:shopping-interface #:models)
+  (:export #:add-shopping-item
+           #:remove-shopping-item
+           #:set-item-bought
+           #:get-all))
+
+(defpackage #:shopping-db-impl
+  (:use #:cl #:alexandria #:shopping-interface #:models)
+  (:export #:add-shopping-item
+           #:remove-shopping-item
+           #:set-item-bought
+           #:get-all))
+
 (defpackage #:html
-  (:use #:cl #:spinneret #:alexandria)
+  (:use #:cl #:spinneret #:alexandria #:models)
   (:export #:secret-login
            #:shopping-list))
 
 (defpackage #:web-site
-  (:use #:cl #:snooze #:jsons #:alexandria)
-  (:export #:shopping-list
-           #:shopping-item-name
-           #:shopping-item-timestamp
-           #:shopping-item-bought
-           #:shopping-item
-           #:*set-not-bought*
-           #:*set-bought*
-           #:*add-shopping-item*
-           #:*remove-shopping-item*))
+  (:use #:cl
+        #:snooze
+        #:jsons
+        #:alexandria
+        #:models
+        #:shopping-interface)
+  (:export #:shopping-list))

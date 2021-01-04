@@ -103,7 +103,7 @@ One solely password for each instance of the website."
           (:form :method "POST"
                  (:input :type "hidden"
                          :name "product-name"
-                         :value (web-site:shopping-item-name item))
+                         :value (shopping-item-name item))
                  (:input :type "hidden"
                          :name "action"
                          :value :remove-shopping-item)
@@ -111,13 +111,13 @@ One solely password for each instance of the website."
           (:form :method "POST"
                  (:input :type "hidden"
                          :name "product-name"
-                         :value (web-site:shopping-item-name item))
+                         :value (shopping-item-name item))
                  (:input :type "hidden"
                          :name "action"
-                         :value (if (web-site:shopping-item-bought item)
+                         :value (if (shopping-item-bought item)
                                     :set-not-bought
                                     :set-bought))
-                 (:input :type "submit" :value (if (web-site:shopping-item-bought item)
+                 (:input :type "submit" :value (if (shopping-item-bought item)
                                                    "☑"
                                                    "☐"))
-                 (:input :type "submit" :class "shopping-item-text" :value (web-site:shopping-item-name item))))))))))
+                 (:input :type "submit" :class "shopping-item-text" :value (shopping-item-name item))))))))))

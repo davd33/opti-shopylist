@@ -70,12 +70,6 @@
 
 ;;; --- TYPES
 
-(defstruct shopping-item
-  "An item of the shopping list - something to buy or already bought."
-  timestamp
-  name
-  bought)
-
 (defstruct (connected-user (:constructor mk-connected-user
                                (token expire-time)))
   "A connected user represents someone of us that has used the right
@@ -86,99 +80,25 @@
 
 ;;; --- FUNCTIONAL FEATURES
 
-(defun shopping-item< (item1 item2)
-  "Does ITEM1 have more visibility than ITEM2?"
-  (let ((bought1 (shopping-item-bought item1))
-        (bought2 (shopping-item-bought item2))
-        (time1 (shopping-item-timestamp item1))
-        (time2 (shopping-item-timestamp item2)))
-    (cond ((and bought1 bought2)
-           (> time1 time2))
-          ((and (null bought1) (null bought2))
-           (> time1 time2))
-          (t
-           (and (null bought1) bought2)))))
-
-(defgeneric add-shopping-item (kind item shopping-list)
-  (:documentation "Add an ITEM to the SHOPPING-LIST."))
-
-(defgeneric remove-shopping-item (kind item shopping-list)
-  (:documentation "Remove an ITEM from the SHOPPING-LIST."))
-
-(defgeneric set-item-bought (kind item shopping-list bought-p)
-  (:documentation "Toggle bought flag of ITEM in SHOPPING-LIST."))
-
-(defgeneric get-all (kind shopping-list)
-  (:documentation "Returns the whole list of shopping items."))
-
-(defmethod add-shopping-item ((kind (eql :DATABASE)) (item shopping-item) shopping-list)
-  (declare (ignore shopping-list))
-  (db:create-shopping-item (shopping-item-name item)
-                           (shopping-item-bought item)))
-
-(defmethod remove-shopping-item ((kind (eql :DATABASE)) (item shopping-item) shopping-list)
-  (declare (ignore shopping-list))
-  (db:delete-shopping-item (shopping-item-name item)))
-
-(defmethod set-item-bought ((kind (eql :DATABASE)) (item shopping-item) shopping-list bought-p)
-  (declare (ignore shopping-list))
-  (db:set-bought-item (shopping-item-name item) bought-p))
-
-(defmethod get-all ((kind (eql :DATABASE)) shopping-list)
-  (declare (ignore shopping-list))
-  (mapcar (lambda (db-shopping-item)
-            (make-shopping-item :timestamp (slot-value db-shopping-item
-                                                       'mito.dao.mixin::updated-at)
-                                :name (slot-value db-shopping-item
-                                                  'db:product-name)
-                                :bought (string= (slot-value db-shopping-item 'db:status)
-                                                 "BGHT")))
-          (db:get-all)))
-
-(defmethod add-shopping-item ((kind (eql :IN_MEMORY)) (item shopping-item) shopping-list)
-  (setf shopping-list
-        (adjoin item shopping-list
-                :key (compose #'str:upcase #'shopping-item-name) :test #'string=)))
-
-(defmethod remove-shopping-item ((kind (eql :IN_MEMORY)) (item shopping-item) shopping-list)
-  (setf shopping-list
-        (remove (shopping-item-name item) shopping-list
-                :test #'string=
-                :key #'shopping-item-name)))
-
-(defmethod set-item-bought ((kind (eql :IN_MEMORY)) (item shopping-item) shopping-list bought-p)
-  (setf shopping-list
-        (substitute (make-shopping-item :timestamp (get-universal-time)
-                                        :name (shopping-item-name item)
-                                        :bought bought-p)
-                    item
-                    shopping-list
-                    :test (lambda (a b)
-                            (string= (shopping-item-name a)
-                                     (shopping-item-name b))))))
-
-(defmethod get-all ((kind (eql :IN_MEMORY)) shopping-list)
-  (stable-sort shopping-list #'shopping-item<))
-
 (defun make-shopping-list-manager (kind)
   "Creates a new shopping-list.
 Returns a function that takes an ACTION and an ITEM and
 calls the appropriate function."
-  (let (shopping-list)
+  (let (shopping-mem-impl::*shopping-list*)
     (lambda (action &optional item)
       (ecase action
 
         (:|GET-SHOPPING-LIST|
-         (get-all kind shopping-list))
+         (get-all kind))
 
         (:|ADD-SHOPPING-ITEM|
-         (add-shopping-item kind item shopping-list))
+         (add-shopping-item kind item))
 
         (:|REMOVE-SHOPPING-ITEM|
-         (remove-shopping-item kind item shopping-list))
+         (remove-shopping-item kind item))
 
         ((:|SET-NOT-BOUGHT| :|SET-BOUGHT|)
-         (set-item-bought kind item shopping-list (eq action :|SET-BOUGHT|)))))))
+         (set-item-bought kind item (eq action :|SET-BOUGHT|)))))))
 
 ;;; --- CONFIGURATION
 
