@@ -108,24 +108,57 @@
 (defgeneric set-item-bought (kind item shopping-list bought-p)
   (:documentation "Toggle bought flag of ITEM in SHOPPING-LIST."))
 
+(defgeneric get-all (kind shopping-list)
+  (:documentation "Returns the whole list of shopping items."))
+
+(defmethod add-shopping-item ((kind (eql :DATABASE)) (item shopping-item) shopping-list)
+  (declare (ignore shopping-list))
+  (db:create-shopping-item (shopping-item-name item)
+                           (shopping-item-bought item)))
+
+(defmethod remove-shopping-item ((kind (eql :DATABASE)) (item shopping-item) shopping-list)
+  (declare (ignore shopping-list))
+  (db:delete-shopping-item (shopping-item-name item)))
+
+(defmethod set-item-bought ((kind (eql :DATABASE)) (item shopping-item) shopping-list bought-p)
+  (declare (ignore shopping-list))
+  (db:set-bought-item (shopping-item-name item) bought-p))
+
+(defmethod get-all ((kind (eql :DATABASE)) shopping-list)
+  (declare (ignore shopping-list))
+  (mapcar (lambda (db-shopping-item)
+            (make-shopping-item :timestamp (slot-value db-shopping-item
+                                                       'mito.dao.mixin::updated-at)
+                                :name (slot-value db-shopping-item
+                                                  'db:product-name)
+                                :bought (string= (slot-value db-shopping-item 'db:status)
+                                                 "BGHT")))
+          (db:get-all)))
+
 (defmethod add-shopping-item ((kind (eql :IN_MEMORY)) (item shopping-item) shopping-list)
-  (adjoin item shopping-list
-          :key (compose #'str:upcase #'shopping-item-name) :test #'string=))
+  (setf shopping-list
+        (adjoin item shopping-list
+                :key (compose #'str:upcase #'shopping-item-name) :test #'string=)))
 
 (defmethod remove-shopping-item ((kind (eql :IN_MEMORY)) (item shopping-item) shopping-list)
-  (remove (shopping-item-name item) shopping-list
-          :test #'string=
-          :key #'shopping-item-name))
+  (setf shopping-list
+        (remove (shopping-item-name item) shopping-list
+                :test #'string=
+                :key #'shopping-item-name)))
 
 (defmethod set-item-bought ((kind (eql :IN_MEMORY)) (item shopping-item) shopping-list bought-p)
-  (substitute (make-shopping-item :timestamp (get-universal-time)
-                                  :name (shopping-item-name item)
-                                  :bought bought-p)
-              item
-              shopping-list
-              :test (lambda (a b)
-                      (string= (shopping-item-name a)
-                               (shopping-item-name b)))))
+  (setf shopping-list
+        (substitute (make-shopping-item :timestamp (get-universal-time)
+                                        :name (shopping-item-name item)
+                                        :bought bought-p)
+                    item
+                    shopping-list
+                    :test (lambda (a b)
+                            (string= (shopping-item-name a)
+                                     (shopping-item-name b))))))
+
+(defmethod get-all ((kind (eql :IN_MEMORY)) shopping-list)
+  (stable-sort shopping-list #'shopping-item<))
 
 (defun make-shopping-list-manager (kind)
   "Creates a new shopping-list.
@@ -136,23 +169,16 @@ calls the appropriate function."
       (ecase action
 
         (:|GET-SHOPPING-LIST|
-         shopping-list)
-
-        (:|SORT-SHOPPING-LIST|
-         (setf shopping-list
-               (stable-sort shopping-list #'shopping-item<)))
+         (get-all kind shopping-list))
 
         (:|ADD-SHOPPING-ITEM|
-         (setf shopping-list
-               (add-shopping-item kind item shopping-list)))
+         (add-shopping-item kind item shopping-list))
 
         (:|REMOVE-SHOPPING-ITEM|
-         (setf shopping-list
-               (remove-shopping-item kind item shopping-list)))
+         (remove-shopping-item kind item shopping-list))
 
         ((:|SET-NOT-BOUGHT| :|SET-BOUGHT|)
-         (setf shopping-list
-               (set-item-bought kind item shopping-list (eq action :|SET-BOUGHT|))))))))
+         (set-item-bought kind item shopping-list (eq action :|SET-BOUGHT|)))))))
 
 ;;; --- CONFIGURATION
 
@@ -208,8 +234,6 @@ calls the appropriate function."
 
     (funcall *shopping-list-manager* (kw (str:upcase action)) item)
 
-    (funcall *shopping-list-manager* :sort-shopping-list)
-
     (redirect (shopping-list-path))))
 
 (defroute shopping-list
@@ -227,6 +251,8 @@ calls the appropriate function."
            (redirect (secret-login-path :login-error "Hacker? Better log in!")))
           ((> (get-universal-time) (connected-user-expire-time found-cuser))
            (redirect (secret-login-path :login-error "Your session has expired!"))))
+
+    (print (funcall *shopping-list-manager* :|GET-SHOPPING-LIST|))
 
     (build-spinneret-html-response
       (html:shopping-list (signout-path :user-token req-token)

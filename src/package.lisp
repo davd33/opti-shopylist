@@ -50,7 +50,15 @@
            #:stop))
 
 (defpackage #:db
-  (:use #:cl))
+  (:use #:cl)
+  (:export #:create-shopping-item
+           #:get-shopping-item
+           #:set-bought-item
+           #:delete-shopping-item
+           #:get-all
+           #:product-name
+           #:status
+           #:connect))
 
 (defpackage #:html
   (:use #:cl #:spinneret #:alexandria)
@@ -63,6 +71,7 @@
            #:shopping-item-name
            #:shopping-item-timestamp
            #:shopping-item-bought
+           #:shopping-item
            #:*set-not-bought*
            #:*set-bought*
            #:*add-shopping-item*
