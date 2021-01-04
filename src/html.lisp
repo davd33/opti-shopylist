@@ -92,7 +92,7 @@ One solely password for each instance of the website."
                 :autofocus)
         (:input :type "hidden"
                 :name "action"
-                :value web-site:*add-shopping-item*)
+                :value :add-shopping-item)
         (:input :type "submit"
                 :value "Add")))
       (:ul
@@ -106,7 +106,7 @@ One solely password for each instance of the website."
                          :value (web-site:shopping-item-name item))
                  (:input :type "hidden"
                          :name "action"
-                         :value web-site:*remove-shopping-item*)
+                         :value :remove-shopping-item)
                  (:input :type "submit" :value "☠"))
           (:form :method "POST"
                  (:input :type "hidden"
@@ -115,8 +115,8 @@ One solely password for each instance of the website."
                  (:input :type "hidden"
                          :name "action"
                          :value (if (web-site:shopping-item-bought item)
-                                    web-site:*set-not-bought*
-                                    web-site:*set-bought*))
+                                    :set-not-bought
+                                    :set-bought))
                  (:input :type "submit" :value (if (web-site:shopping-item-bought item)
                                                    "☑"
                                                    "☐"))

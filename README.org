@@ -1,3 +1,15 @@
 #+TITLE: A shopping list.
 
 An optimum project for sharing a shopping list between opti-friends.
+
+* Database
+
+** Shopping item
+
+Table =OPTI_SHOPYLIST=.
+
+| field     | type    |
+|-----------+---------|
+| timestamp | date    |
+| name      | varchar |
+| bought    | char    |

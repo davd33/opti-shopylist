@@ -11,6 +11,47 @@
   "Generate a new user token."
   (str:concat *token-cookie-name* "_" (write-to-string (get-universal-time))))
 
+(defun mkstr (&rest args)
+  (with-output-to-string (s)
+    (dolist (a args) (princ a s))))
+
+(defun symb (&rest args)
+  (values (intern (apply #'mkstr args))))
+
+(defun kw (&rest args)
+  (values (intern (apply #'mkstr args) :keyword)))
+
+(defun group (source n)
+  (if (zerop n) (error "zero length"))
+  (labels ((rec (source acc)
+             (let ((rest (nthcdr n source)))
+               (if (consp rest)
+                   (rec rest (cons
+                               (subseq source 0 n)
+                               acc))
+                   (nreverse
+                     (cons source acc))))))
+    (if source (rec source nil) nil)))
+
+(defun flatten (x)
+  (labels ((rec (x acc)
+             (cond ((null x) acc)
+                   ((atom x) (cons x acc))
+                   (t (rec
+                        (car x)
+                        (rec (cdr x) acc))))))
+    (rec x nil)))
+
+(defun fact (x)
+  (if (= x 0)
+    1
+    (* x (fact (- x 1)))))
+
+(defun choose (n r)
+  (/ (fact n)
+     (fact (- n r))
+     (fact r)))
+
 ;;; --- REDIRECTS
 
 (define-condition redirect (snooze:http-condition)
@@ -26,28 +67,6 @@
   (declare (ignore rs ct))
   (setf (hunchentoot:header-out :location) (location c))
   (format nil "See here: ~a" (location c)))
-
-;;; --- CONFIGURATION
-
-(defparameter *token-cookie-name* "OPTI-TOKEN"
-  "The name of the cookie used to identified a logged-in user.")
-
-(defparameter *opti-password* (or (uiop:getenv "OPTIPASSWD") "OPTI-PASSWORD")
-  "Password for accessing the shopping list.")
-
-(defvar *shopping-list* '()
-  "List of items to buy.")
-
-(defvar *connected-users* '()
-  "Every CONNECTED-USER of the shopping list.")
-
-(defparameter *set-not-bought* "SET_NOT_BOUGHT")
-
-(defparameter *set-bought* "SET_BOUGHT")
-
-(defparameter *add-shopping-item* "ADD_SHOPPING_ITEM")
-
-(defparameter *remove-shopping-item* "REMOVE_SHOPPING_ITEM")
 
 ;;; --- TYPES
 
@@ -79,6 +98,77 @@
            (> time1 time2))
           (t
            (and (null bought1) bought2)))))
+
+(defgeneric add-shopping-item (kind item shopping-list)
+  (:documentation "Add an ITEM to the SHOPPING-LIST."))
+
+(defgeneric remove-shopping-item (kind item shopping-list)
+  (:documentation "Remove an ITEM from the SHOPPING-LIST."))
+
+(defgeneric set-item-bought (kind item shopping-list bought-p)
+  (:documentation "Toggle bought flag of ITEM in SHOPPING-LIST."))
+
+(defmethod add-shopping-item ((kind (eql :IN_MEMORY)) (item shopping-item) shopping-list)
+  (adjoin item shopping-list
+          :key (compose #'str:upcase #'shopping-item-name) :test #'string=))
+
+(defmethod remove-shopping-item ((kind (eql :IN_MEMORY)) (item shopping-item) shopping-list)
+  (remove (shopping-item-name item) shopping-list
+          :test #'string=
+          :key #'shopping-item-name))
+
+(defmethod set-item-bought ((kind (eql :IN_MEMORY)) (item shopping-item) shopping-list bought-p)
+  (substitute (make-shopping-item :timestamp (get-universal-time)
+                                  :name (shopping-item-name item)
+                                  :bought bought-p)
+              item
+              shopping-list
+              :test (lambda (a b)
+                      (string= (shopping-item-name a)
+                               (shopping-item-name b)))))
+
+(defun make-shopping-list-manager (kind)
+  "Creates a new shopping-list.
+Returns a function that takes an ACTION and an ITEM and
+calls the appropriate function."
+  (let (shopping-list)
+    (lambda (action &optional item)
+      (ecase action
+
+        (:|GET-SHOPPING-LIST|
+         shopping-list)
+
+        (:|SORT-SHOPPING-LIST|
+         (setf shopping-list
+               (stable-sort shopping-list #'shopping-item<)))
+
+        (:|ADD-SHOPPING-ITEM|
+         (setf shopping-list
+               (add-shopping-item kind item shopping-list)))
+
+        (:|REMOVE-SHOPPING-ITEM|
+         (setf shopping-list
+               (remove-shopping-item kind item shopping-list)))
+
+        ((:|SET-NOT-BOUGHT| :|SET-BOUGHT|)
+         (setf shopping-list
+               (set-item-bought kind item shopping-list (eq action :|SET-BOUGHT|))))))))
+
+;;; --- CONFIGURATION
+
+(defparameter *token-cookie-name* "OPTI-TOKEN"
+  "The name of the cookie used to identified a logged-in user.")
+
+(defparameter *opti-password* (or (uiop:getenv "OPTIPASSWD") "OPTI-PASSWORD")
+  "Password for accessing the shopping list.")
+
+(defvar *shopping-list-manager* (make-shopping-list-manager
+                                 (or (uiop:getenv "SHOPPING_LIST_MANAGER")
+                                     :IN_MEMORY))
+  "Shopping list manager (can be a IN_MEMORY or DATABASE one).")
+
+(defvar *connected-users* '()
+  "Every CONNECTED-USER of the shopping list.")
 
 ;;; --- DEFINE RESOURCES
 
@@ -116,21 +206,9 @@
                                    :timestamp (get-universal-time)))
          (action (cdr (assoc "action" payload :test #'string=))))
 
-    (cond ((string= *add-shopping-item* action)
-           (setf *shopping-list*
-                 (adjoin item *shopping-list* :key (compose #'str:upcase #'shopping-item-name) :test #'string=)))
-          ((string= *remove-shopping-item* action)
-           (setf *shopping-list*
-                 (remove product-name *shopping-list* :test #'string= :key #'shopping-item-name)))
-          ((or (string= *set-not-bought* action) (string= *set-bought* action))
-           (let ((item (find product-name *shopping-list* :key #'shopping-item-name :test #'string=)))
-             (setf (shopping-item-bought item)
-                   (if (string= *set-not-bought* action)
-                       nil
-                       t)))))
+    (funcall *shopping-list-manager* (kw (str:upcase action)) item)
 
-    (setf *shopping-list*
-          (stable-sort *shopping-list* #'shopping-item<))
+    (funcall *shopping-list-manager* :sort-shopping-list)
 
     (redirect (shopping-list-path))))
 
@@ -152,7 +230,7 @@
 
     (build-spinneret-html-response
       (html:shopping-list (signout-path :user-token req-token)
-                          *shopping-list*))))
+                          (funcall *shopping-list-manager* :|GET-SHOPPING-LIST|)))))
 
 ;;; --- SECRET LOGIN
 

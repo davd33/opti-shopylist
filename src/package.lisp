@@ -49,6 +49,9 @@
   (:export #:start
            #:stop))
 
+(defpackage #:db
+  (:use #:cl))
+
 (defpackage #:html
   (:use #:cl #:spinneret #:alexandria)
   (:export #:secret-login
