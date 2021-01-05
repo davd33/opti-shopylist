@@ -7,8 +7,8 @@ exec ros -Q -- $0 "$@"
   (ros:ensure-asdf)
   #+quicklisp(ql:quickload '() :silent t)
   #+quicklisp(setf ql:*local-project-directories*
-                   '(#P"/home/davd/.roswell/lisp/quicklisp/local-projects/"
-                     #P"/home/davd/projects/"))
+                   '(#P"~/.roswell/lisp/quicklisp/local-projects/"
+                     #P"~/projects/"))
   #+quicklisp(ql:quickload :opti-shopylist)
   )
 
