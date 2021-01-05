@@ -26,11 +26,12 @@ Set the following env variables to enable the database implementation:
 
 Table =OPTI_SHOPYLIST=.
 
-| field     | type    |
-|-----------+---------|
-| timestamp | date    |
-| name      | varchar |
-| bought    | char    |
+| field        | type        |
+|--------------+-------------|
+| product-name | varchar 128 |
+| status       | char 4      |
+
+See the [[https://github.com/fukamachi/mito][Mito]] library to find out how the table is created.
 
 * Create executable
 
