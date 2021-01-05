@@ -2,6 +2,24 @@
 
 An optimum project for sharing a shopping list between opti-friends.
 
+* Implementations
+
+Two implementations are available : in-memory and database.
+
+** In Memory
+
+Nothing special to do in order to load the in-memory shopping list.
+The list will be lost when the process quits.
+
+** Database
+
+Set the following env variables to enable the database implementation:
+
+ 1. OPTI_SHOPYLIST_MANAGER="DATABASE"
+ 2. OPTI_SHOPYLIST_DB_NAME="my-db-name"
+ 3. OPTI_SHOPYLIST_USERNAME="db-user"
+ 4. OPTI_SHOPYLIST_PASSWORD="password-for-db-user"
+
 * Database
 
 ** Shopping item
@@ -13,3 +31,12 @@ Table =OPTI_SHOPYLIST=.
 | timestamp | date    |
 | name      | varchar |
 | bought    | char    |
+
+* Create executable
+
+Run the following command to create the executable.
+You'll need [[https://github.com/roswell/roswell][Roswell]]!
+
+#+BEGIN_SRC sh
+ros dump executable opti-shopylist.ros
+#+END_SRC
