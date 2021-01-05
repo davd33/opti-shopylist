@@ -1,0 +1,44 @@
+#!/bin/sh
+#|-*- mode:lisp -*-|#
+#|
+exec ros -Q -- $0 "$@"
+|#
+(progn ;;init forms
+  (ros:ensure-asdf)
+  #+quicklisp(ql:quickload '() :silent t)
+  #+quicklisp(setf ql:*local-project-directories*
+                   '(#P"/home/davd/.roswell/lisp/quicklisp/local-projects/"
+                     #P"/home/davd/projects/"))
+  #+quicklisp(ql:quickload :opti-shopylist)
+  )
+
+(defpackage :ros.script.opti-shopylist.3818855572
+  (:use :cl))
+(in-package :ros.script.opti-shopylist.3818855572)
+
+(defun main (&rest argv)
+  (declare (ignorable argv))
+
+  (when (string= (uiop:getenv "OPTI_SHOPYLIST_MANAGER") "DATABASE")
+    (db:connect (uiop:getenv "OPTI_SHOPYLIST_DB_NAME")
+                (uiop:getenv "OPTI_SHOPYLIST_USERNAME")
+                (uiop:getenv "OPTI_SHOPYLIST_PASSWORD")))
+
+  (api:start)
+
+  ;; ccl interrupt
+  (setf ccl:*break-hook*
+        (lambda (cond hook)
+          (declare (ignore cond hook))
+          (format t "~2%Shutting down. Bye :)~%")
+          (ccl:quit)))
+
+  (loop until nil
+        do (sleep 60))
+
+  ;; sbcl interrupt
+  ;; (handler-case (loop until nil
+  ;;                     do (sleep 60))
+  ;;   (SB-SYS:INTERACTIVE-INTERRUPT () (format t "~2%Shutting down. Bye :)~%")))
+  )
+;;; vim: set ft=lisp lisp:

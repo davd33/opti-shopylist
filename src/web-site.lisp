@@ -109,7 +109,9 @@ calls the appropriate function."
   "Password for accessing the shopping list.")
 
 (defvar *shopping-list-manager* (make-shopping-list-manager
-                                 (or (uiop:getenv "SHOPPING_LIST_MANAGER")
+                                 (or (let ((manager (uiop:getenv "OPTI_SHOPYLIST_MANAGER")))
+                                       (if (string= "DATABASE" manager)
+                                           :DATABASE :IN_MEMORY))
                                      :IN_MEMORY))
   "Shopping list manager (can be a IN_MEMORY or DATABASE one).")
 
@@ -171,8 +173,6 @@ calls the appropriate function."
            (redirect (secret-login-path :login-error "Hacker? Better log in!")))
           ((> (get-universal-time) (connected-user-expire-time found-cuser))
            (redirect (secret-login-path :login-error "Your session has expired!"))))
-
-    (print (funcall *shopping-list-manager* :|GET-SHOPPING-LIST|))
 
     (build-spinneret-html-response
       (html:shopping-list (signout-path :user-token req-token)
