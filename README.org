@@ -24,7 +24,8 @@ Set the following env variables to enable the database implementation:
 
 ** Shopping item
 
-Table =OPTI_SHOPYLIST=.
+Table =shopping_item= created by mito with the dao =shopping-item= in
+the package :db of the project.
 
 | field        | type        |
 |--------------+-------------|
