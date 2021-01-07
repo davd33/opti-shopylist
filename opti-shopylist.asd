@@ -64,7 +64,6 @@
                "rove")
   :description "Test system for opti-shopylist"
   :components ((:module "tests"
-                                        ;:components
-                                        ;(())
-                        ))
+                :components
+                ((:file "make-shopping-item-manager"))))
   :perform (test-op (op c) (symbol-call :rove :run c)))

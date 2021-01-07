@@ -101,4 +101,5 @@
         #:alexandria
         #:models
         #:shopping-interface)
-  (:export #:shopping-list))
+  (:export #:shopping-list
+           #:make-shopping-list-manager))
