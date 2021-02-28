@@ -1,5 +1,15 @@
 ;;;; package.lisp
 
+(defpackage #:macro-utils
+  (:use #:cl)
+  (:export #:mkstr
+           #:symb
+           #:kw
+           #:group
+           #:flatit
+           #:fact
+           #:choose))
+
 (defpackage #:alists
   (:use #:cl #:alexandria)
   (:export #:aconses
