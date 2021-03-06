@@ -63,7 +63,9 @@ variable
     \* sync responses for all APPS
     syncRespQueue = [a \in APPS |-> <<>>],
     \* set of taken IDs
-    takenIDs = {};
+    takenIDs = {},
+    \* all sync req/resp ever sent
+    msgsLog = {};
 
 define
     NewShopyItem(list) == 
@@ -139,8 +141,8 @@ begin AppLoop:
                 shopyList[self] := mergeResult;
                 syncRespQueue[syncRequest.app] := Append(syncRespQueue[syncRequest.app], NewSyncResp(self, mergeResult, syncRequest.id));
                 actionHistory := Append(actionHistory, RESP_SYNC_ACTION);
+                msgsLog := msgsLog ++ syncRequest;
                 syncReqQueue[self] := Tail(syncReqQueue[self]);
-                takenIDs := takenIDs -- syncRequest.id;
             end with;
         or
             \* receive a sync response
@@ -149,8 +151,8 @@ begin AppLoop:
                  mergeResult = shopyList[self] \union syncResponse.list do
                 shopyList[self] := mergeResult;
                 actionHistory := Append(actionHistory, END_SYNC_ACTION);
+                msgsLog := msgsLog ++ syncResponse;
                 syncRespQueue[self] := Tail(syncRespQueue[self]);
-                takenIDs := takenIDs -- syncResponse.id;
             end with;
         end either;
     end while;
@@ -158,9 +160,9 @@ end process;
 
 end algorithm;
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "f33e3231" /\ chksum(tla) = "653f15e1")
-\* Label AppLoop of process AppLoop at line 100 col 5 changed to AppLoop_
-VARIABLES shopyList, syncReqQueue, syncRespQueue, takenIDs
+\* BEGIN TRANSLATION (chksum(pcal) = "4551bd35" /\ chksum(tla) = "78504cc6")
+\* Label AppLoop of process AppLoop at line 109 col 5 changed to AppLoop_
+VARIABLES shopyList, syncReqQueue, syncRespQueue, takenIDs, msgsLog
 
 (* define statement *)
 NewShopyItem(list) ==
@@ -189,7 +191,8 @@ NewSyncResp(app, mergeResult, id) ==
 
 VARIABLE actionHistory
 
-vars == << shopyList, syncReqQueue, syncRespQueue, takenIDs, actionHistory >>
+vars == << shopyList, syncReqQueue, syncRespQueue, takenIDs, msgsLog, 
+           actionHistory >>
 
 ProcSet == (APPS)
 
@@ -198,43 +201,45 @@ Init == (* Global variables *)
         /\ syncReqQueue = [a \in APPS |-> <<>>]
         /\ syncRespQueue = [a \in APPS |-> <<>>]
         /\ takenIDs = {}
+        /\ msgsLog = {}
         (* Process AppLoop *)
         /\ actionHistory = [self \in APPS |-> <<>>]
 
-AppLoop(self) == \/ /\ Cardinality(shopyList[self]) < Cardinality(ITEM_IDs)
-                    /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] ++ NewShopyItem(shopyList[self])]
-                    /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], ADD_ACTION)]
-                    /\ UNCHANGED <<syncReqQueue, syncRespQueue, takenIDs>>
-                 \/ /\ shopyList[self] /= {}
-                    /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- ExistingShopyItem(shopyList[self])]
-                    /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], RM_ACTION)]
-                    /\ UNCHANGED <<syncReqQueue, syncRespQueue, takenIDs>>
-                 \/ /\ shopyList[self] /= {}
-                    /\ \E item \in shopyList[self]: ~item.bought
-                    /\ LET modifiedItem == ExistingNotBoughtShopyItem(shopyList[self]) IN
-                         /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- modifiedItem ++ [modifiedItem EXCEPT !.bought = TRUE]]
-                         /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], SET_BOUGHT_ACTION)]
-                    /\ UNCHANGED <<syncReqQueue, syncRespQueue, takenIDs>>
-                 \/ /\ \E a \in (APPS -- self):
-                         /\ syncReqQueue' = [syncReqQueue EXCEPT ![a] = Append(syncReqQueue[a], NewSyncReq(a))]
-                         /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], REQ_SYNC_ACTION)]
-                    /\ UNCHANGED <<shopyList, syncRespQueue, takenIDs>>
-                 \/ /\ syncReqQueue[self] /= <<>>
-                    /\ LET syncRequest == Head(syncReqQueue[self]) IN
-                         LET mergeResult == shopyList[self] \union syncRequest.list IN
-                           /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
-                           /\ syncRespQueue' = [syncRespQueue EXCEPT ![syncRequest.app] = Append(syncRespQueue[syncRequest.app], NewSyncResp(self, mergeResult, syncRequest.id))]
-                           /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], RESP_SYNC_ACTION)]
-                           /\ syncReqQueue' = [syncReqQueue EXCEPT ![self] = Tail(syncReqQueue[self])]
-                           /\ takenIDs' = takenIDs -- syncRequest.id
-                 \/ /\ syncRespQueue[self] /= <<>>
-                    /\ LET syncResponse == Head(syncRespQueue[self]) IN
-                         LET mergeResult == shopyList[self] \union syncResponse.list IN
-                           /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
-                           /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], END_SYNC_ACTION)]
-                           /\ syncRespQueue' = [syncRespQueue EXCEPT ![self] = Tail(syncRespQueue[self])]
-                           /\ takenIDs' = takenIDs -- syncResponse.id
-                    /\ UNCHANGED syncReqQueue
+AppLoop(self) == /\ \/ /\ Cardinality(shopyList[self]) < Cardinality(ITEM_IDs)
+                       /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] ++ NewShopyItem(shopyList[self])]
+                       /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], ADD_ACTION)]
+                       /\ UNCHANGED <<syncReqQueue, syncRespQueue, msgsLog>>
+                    \/ /\ shopyList[self] /= {}
+                       /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- ExistingShopyItem(shopyList[self])]
+                       /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], RM_ACTION)]
+                       /\ UNCHANGED <<syncReqQueue, syncRespQueue, msgsLog>>
+                    \/ /\ shopyList[self] /= {}
+                       /\ \E item \in shopyList[self]: ~item.bought
+                       /\ LET modifiedItem == ExistingNotBoughtShopyItem(shopyList[self]) IN
+                            /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- modifiedItem ++ [modifiedItem EXCEPT !.bought = TRUE]]
+                            /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], SET_BOUGHT_ACTION)]
+                       /\ UNCHANGED <<syncReqQueue, syncRespQueue, msgsLog>>
+                    \/ /\ \E a \in (APPS -- self):
+                            /\ syncReqQueue' = [syncReqQueue EXCEPT ![a] = Append(syncReqQueue[a], NewSyncReq(a))]
+                            /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], REQ_SYNC_ACTION)]
+                       /\ UNCHANGED <<shopyList, syncRespQueue, msgsLog>>
+                    \/ /\ syncReqQueue[self] /= <<>>
+                       /\ LET syncRequest == Head(syncReqQueue[self]) IN
+                            LET mergeResult == shopyList[self] \union syncRequest.list IN
+                              /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
+                              /\ syncRespQueue' = [syncRespQueue EXCEPT ![syncRequest.app] = Append(syncRespQueue[syncRequest.app], NewSyncResp(self, mergeResult, syncRequest.id))]
+                              /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], RESP_SYNC_ACTION)]
+                              /\ msgsLog' = msgsLog ++ syncRequest
+                              /\ syncReqQueue' = [syncReqQueue EXCEPT ![self] = Tail(syncReqQueue[self])]
+                    \/ /\ syncRespQueue[self] /= <<>>
+                       /\ LET syncResponse == Head(syncRespQueue[self]) IN
+                            LET mergeResult == shopyList[self] \union syncResponse.list IN
+                              /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
+                              /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], END_SYNC_ACTION)]
+                              /\ msgsLog' = msgsLog ++ syncResponse
+                              /\ syncRespQueue' = [syncRespQueue EXCEPT ![self] = Tail(syncRespQueue[self])]
+                       /\ UNCHANGED syncReqQueue
+                 /\ UNCHANGED takenIDs
 
 Next == (\E self \in APPS: AppLoop(self))
 
@@ -249,23 +254,16 @@ TypeOK ==
         /\ shopyList[a] \subseteq ShopyItems
         /\ PT!Range(syncReqQueue[a]) \subseteq SyncMsgs
         /\ PT!Range(syncRespQueue[a]) \subseteq SyncMsgs
+        /\ msgsLog \subseteq SyncMsgs
     /\ takenIDs \subseteq IDs
 
-SyncReqResp ==
-    \E id \in IDs:
-        (\E a \in APPS: \E req \in PT!Range(actionHistory[a]):
-            /\ req \notin Actions
-            /\ req \in SyncMsgs
-            /\ id = req.id
-            /\ REQ_SYNC_ACTION = req.type)
-        =>
-        <>[](\E a \in APPS: \E resp \in PT!Range(actionHistory[a]):
-            /\ resp \notin Actions
-            /\ resp \in SyncMsgs
-            /\ id = resp.id
-            /\ END_SYNC_ACTION = resp.type)
+SyncIntendAlwaysSucceeds ==
+    \A id \in IDs:
+        (\E req \in msgsLog: req.id = id /\ req.type = REQ_SYNC_ACTION)
+        ~> (\E resp \in msgsLog: 
+                resp.id = id /\ resp.type = RESP_SYNC_ACTION)
 
 =============================================================================
 \* Modification History
-\* Last modified Sat Mar 06 20:48:55 CET 2021 by davd
+\* Last modified Sat Mar 06 23:12:33 CET 2021 by davd
 \* Created Tue Mar 02 12:33:43 CET 2021 by davd
