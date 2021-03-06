@@ -1,3 +1,5 @@
 **/*.fasl
 **/*.lafsl
 **/*.lx32fsl
+specs/*.toolbox/*
+!specs/*.toolbox/*[a-z].launch
