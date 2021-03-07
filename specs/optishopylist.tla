@@ -1,7 +1,7 @@
 --------------------------- MODULE optishopylist ---------------------------
 
 EXTENDS TLC, Integers, FiniteSets, Sequences
-CONSTANTS ITEM_IDs, APPS, IDs
+CONSTANTS PRODUCTS, APPS, IDs, GATEAPP
 
 PT == INSTANCE PT
 
@@ -13,7 +13,7 @@ set -- item == set \ {item}
 (* Any item could have an information for how much of a product one        *)
 (* wants to buy (not relevant in this specification).                      *)
 (***************************************************************************)
-ShopyItems == [id: ITEM_IDs, bought: BOOLEAN]
+ShopyItems == [id: PRODUCTS, bought: BOOLEAN]
 
 ADD_ACTION == "add"
 RM_ACTION == "rm"
@@ -48,6 +48,14 @@ SyncMsgs ==
      type: SyncActions]
 
 (***************************************************************************)
+(* Messages sent for joining the network.                                  *)
+(***************************************************************************)
+JoinMsgs ==
+    [app: APPS,
+     knownHosts: SUBSET APPS,
+     assignedGossipFriends: {apps \in (APPS \X APPS): apps[1] /= apps[2]}]
+
+(***************************************************************************)
 (* The spec now depicts a shopping-list app where the server app manages   *)
 (* several users and hence multiple lists of items that synch eventually.  *)
 (*                                                                         *)
@@ -62,19 +70,27 @@ variable
     syncReqQueue = [a \in APPS |-> <<>>],
     \* sync responses for all APPS
     syncRespQueue = [a \in APPS |-> <<>>],
+    \* join to network requests
+    joinReqQueue = <<>>,
     \* set of taken IDs
-    takenIDs = {},
-    \* all sync req/resp ever sent
-    msgsLog = {};
+    takenIDs = {};
 
 define
+    (***********************************************************************)
+    (* A couple of helpers for shopy-list items                            *)
+    (***********************************************************************)
+    
     NewShopyItem(list) == 
-        [id     |-> (CHOOSE x \in ITEM_IDs: ~\E i \in list: x = i.id), 
+        [id     |-> (CHOOSE x \in PRODUCTS: ~\E i \in list: x = i.id), 
          bought |-> FALSE]
          
     ExistingShopyItem(list) == CHOOSE x \in list: TRUE
     
     ExistingNotBoughtShopyItem(list) == CHOOSE x \in list: x.bought = FALSE
+    
+    (***********************************************************************)
+    (* Helpers for Sync messages request/response.                         *)
+    (***********************************************************************)
     
     NewSyncMsg(id, a, l, ml, t) ==
         [id |-> id,
@@ -82,76 +98,86 @@ define
          list |-> l, 
          mergedList |-> ml,
          type |-> t]
+         
     NewSyncReqMsg(a, l, ml, t) ==
         NewSyncMsg(
-            (CHOOSE i \in IDs: ~\E ti \in takenIDs: i = ti),
+            (CHOOSE i \in IDs: \A ti \in takenIDs: i = ti),
             a, l, ml, t
         )
+        
     NewSyncReq(app) == 
         NewSyncReqMsg(app, shopyList[app], {}, REQ_SYNC_ACTION)
+        
     NewSyncResp(app, mergeResult, id) == 
         NewSyncMsg(id, app, shopyList[app], mergeResult, RESP_SYNC_ACTION)
+    
+    (***********************************************************************)
+    (* Helpers for the decentralized network features.                     *)
+    (***********************************************************************)
+    IsGate(app) == app = GATEAPP
 end define;
 
 (***************************************************************************)
 (* This proccess represents a shopy-list running                           *)
-(* in one of the several offline clients.                                  *)
-(* Several shopy-lists are running on various app processes. Actually,     *)
-(* we specify what happens in the system when 2 client apps want to synch  *)
-(* their shopy-list. We assume that every client app has only one such     *)
-(* list since the user is able to synch any 2 lists together.              *)
+(* in one of the several network clients.                                  *)
+(*                                                                         *)
+(* Since Opti-shopylist is a decentralized program, the user creates a     *)
+(* network of connected instances of Opti-shopylist.                       *)
+(*                                                                         *)
+(* We assume that every client app has only one shopy-list.                *)
 (***************************************************************************)
-fair process AppLoop \in APPS
+fair process ClientApp \in APPS
 variables
-    actionHistory = <<>>;
+    gossipFriends = {},
+    knownNetworkClients = {};
 
 begin AppLoop:
     while TRUE do
         
-        either 
+        either
+            \* JOIN NETWORK
+            skip;
+        or
             \* ADD
-            await Cardinality(shopyList[self]) < Cardinality(ITEM_IDs);
+            await Cardinality(shopyList[self]) < Cardinality(PRODUCTS);
             shopyList[self] := shopyList[self] ++ NewShopyItem(shopyList[self]);
-            actionHistory := Append(actionHistory, ADD_ACTION);
         or
             \* REMOVE
             await shopyList[self] /= {};
             shopyList[self] := shopyList[self] -- ExistingShopyItem(shopyList[self]);
-            actionHistory := Append(actionHistory, RM_ACTION);
         or
             \* set to BOUGHT
             await shopyList[self] /= {};
             await \E item \in shopyList[self]: ~item.bought;
             with modifiedItem = ExistingNotBoughtShopyItem(shopyList[self]) do
                 shopyList[self] := shopyList[self] -- modifiedItem ++ [modifiedItem EXCEPT !.bought = TRUE];
-                actionHistory := Append(actionHistory, SET_BOUGHT_ACTION);
             end with;
         or
-            \* request a sync with another app
-            with a \in (APPS -- self) do
-                syncReqQueue[a] := Append(syncReqQueue[a], NewSyncReq(a));
-                actionHistory := Append(actionHistory, REQ_SYNC_ACTION);
+            \* SEND SYNC REQUEST
+            with a \in (knownNetworkClients -- self), 
+                 newRequest = NewSyncReq(self) do
+                
+                syncReqQueue[a] := Append(syncReqQueue[a], newRequest);
             end with;
         or
-            \* receive a sync request from another app
+            \* RCV SYNC REQUEST
             await syncReqQueue[self] /= <<>>;
             with syncRequest = Head(syncReqQueue[self]),
-                 mergeResult = shopyList[self] \union syncRequest.list do
+                 mergeResult = shopyList[self] \union syncRequest.list,
+                 newResp = NewSyncResp(self, mergeResult, syncRequest.id) do
+                
+                syncReqQueue[self] := Tail(syncReqQueue[self]);
                 \* merge from request app
                 shopyList[self] := mergeResult;
-                syncRespQueue[syncRequest.app] := Append(syncRespQueue[syncRequest.app], NewSyncResp(self, mergeResult, syncRequest.id));
-                actionHistory := Append(actionHistory, RESP_SYNC_ACTION);
-                msgsLog := msgsLog ++ syncRequest;
-                syncReqQueue[self] := Tail(syncReqQueue[self]);
+                syncRespQueue[syncRequest.app] := Append(syncRespQueue[syncRequest.app], newResp);
             end with;
         or
-            \* receive a sync response
+            \* RCV SYNC RESPONSE
             await syncRespQueue[self] /= <<>>;
             with syncResponse = Head(syncRespQueue[self]),
                  mergeResult = shopyList[self] \union syncResponse.list do
+                
                 shopyList[self] := mergeResult;
-                actionHistory := Append(actionHistory, END_SYNC_ACTION);
-                msgsLog := msgsLog ++ syncResponse;
                 syncRespQueue[self] := Tail(syncRespQueue[self]);
             end with;
         end either;
@@ -160,18 +186,21 @@ end process;
 
 end algorithm;
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "4551bd35" /\ chksum(tla) = "78504cc6")
-\* Label AppLoop of process AppLoop at line 109 col 5 changed to AppLoop_
-VARIABLES shopyList, syncReqQueue, syncRespQueue, takenIDs, msgsLog
+\* BEGIN TRANSLATION (chksum(pcal) = "fd35c6b5" /\ chksum(tla) = "eea1508f")
+VARIABLES shopyList, syncReqQueue, syncRespQueue, joinReqQueue, takenIDs
 
 (* define statement *)
 NewShopyItem(list) ==
-    [id     |-> (CHOOSE x \in ITEM_IDs: ~\E i \in list: x = i.id),
+    [id     |-> (CHOOSE x \in PRODUCTS: ~\E i \in list: x = i.id),
      bought |-> FALSE]
 
 ExistingShopyItem(list) == CHOOSE x \in list: TRUE
 
 ExistingNotBoughtShopyItem(list) == CHOOSE x \in list: x.bought = FALSE
+
+
+
+
 
 NewSyncMsg(id, a, l, ml, t) ==
     [id |-> id,
@@ -179,20 +208,28 @@ NewSyncMsg(id, a, l, ml, t) ==
      list |-> l,
      mergedList |-> ml,
      type |-> t]
+
 NewSyncReqMsg(a, l, ml, t) ==
     NewSyncMsg(
-        (CHOOSE i \in IDs: ~\E ti \in takenIDs: i = ti),
+        (CHOOSE i \in IDs: \A ti \in takenIDs: i = ti),
         a, l, ml, t
     )
+
 NewSyncReq(app) ==
     NewSyncReqMsg(app, shopyList[app], {}, REQ_SYNC_ACTION)
+
 NewSyncResp(app, mergeResult, id) ==
     NewSyncMsg(id, app, shopyList[app], mergeResult, RESP_SYNC_ACTION)
 
-VARIABLE actionHistory
 
-vars == << shopyList, syncReqQueue, syncRespQueue, takenIDs, msgsLog, 
-           actionHistory >>
+
+
+IsGate(app) == app = GATEAPP
+
+VARIABLES gossipFriends, knownNetworkClients
+
+vars == << shopyList, syncReqQueue, syncRespQueue, joinReqQueue, takenIDs, 
+           gossipFriends, knownNetworkClients >>
 
 ProcSet == (APPS)
 
@@ -200,70 +237,63 @@ Init == (* Global variables *)
         /\ shopyList = [a \in APPS |-> {}]
         /\ syncReqQueue = [a \in APPS |-> <<>>]
         /\ syncRespQueue = [a \in APPS |-> <<>>]
+        /\ joinReqQueue = <<>>
         /\ takenIDs = {}
-        /\ msgsLog = {}
-        (* Process AppLoop *)
-        /\ actionHistory = [self \in APPS |-> <<>>]
+        (* Process ClientApp *)
+        /\ gossipFriends = [self \in APPS |-> {}]
+        /\ knownNetworkClients = [self \in APPS |-> {}]
 
-AppLoop(self) == /\ \/ /\ Cardinality(shopyList[self]) < Cardinality(ITEM_IDs)
-                       /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] ++ NewShopyItem(shopyList[self])]
-                       /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], ADD_ACTION)]
-                       /\ UNCHANGED <<syncReqQueue, syncRespQueue, msgsLog>>
-                    \/ /\ shopyList[self] /= {}
-                       /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- ExistingShopyItem(shopyList[self])]
-                       /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], RM_ACTION)]
-                       /\ UNCHANGED <<syncReqQueue, syncRespQueue, msgsLog>>
-                    \/ /\ shopyList[self] /= {}
-                       /\ \E item \in shopyList[self]: ~item.bought
-                       /\ LET modifiedItem == ExistingNotBoughtShopyItem(shopyList[self]) IN
-                            /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- modifiedItem ++ [modifiedItem EXCEPT !.bought = TRUE]]
-                            /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], SET_BOUGHT_ACTION)]
-                       /\ UNCHANGED <<syncReqQueue, syncRespQueue, msgsLog>>
-                    \/ /\ \E a \in (APPS -- self):
-                            /\ syncReqQueue' = [syncReqQueue EXCEPT ![a] = Append(syncReqQueue[a], NewSyncReq(a))]
-                            /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], REQ_SYNC_ACTION)]
-                       /\ UNCHANGED <<shopyList, syncRespQueue, msgsLog>>
-                    \/ /\ syncReqQueue[self] /= <<>>
-                       /\ LET syncRequest == Head(syncReqQueue[self]) IN
-                            LET mergeResult == shopyList[self] \union syncRequest.list IN
-                              /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
-                              /\ syncRespQueue' = [syncRespQueue EXCEPT ![syncRequest.app] = Append(syncRespQueue[syncRequest.app], NewSyncResp(self, mergeResult, syncRequest.id))]
-                              /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], RESP_SYNC_ACTION)]
-                              /\ msgsLog' = msgsLog ++ syncRequest
-                              /\ syncReqQueue' = [syncReqQueue EXCEPT ![self] = Tail(syncReqQueue[self])]
-                    \/ /\ syncRespQueue[self] /= <<>>
-                       /\ LET syncResponse == Head(syncRespQueue[self]) IN
-                            LET mergeResult == shopyList[self] \union syncResponse.list IN
-                              /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
-                              /\ actionHistory' = [actionHistory EXCEPT ![self] = Append(actionHistory[self], END_SYNC_ACTION)]
-                              /\ msgsLog' = msgsLog ++ syncResponse
-                              /\ syncRespQueue' = [syncRespQueue EXCEPT ![self] = Tail(syncRespQueue[self])]
-                       /\ UNCHANGED syncReqQueue
-                 /\ UNCHANGED takenIDs
+ClientApp(self) == /\ \/ /\ TRUE
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue>>
+                      \/ /\ Cardinality(shopyList[self]) < Cardinality(PRODUCTS)
+                         /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] ++ NewShopyItem(shopyList[self])]
+                         /\ UNCHANGED <<syncReqQueue, syncRespQueue>>
+                      \/ /\ shopyList[self] /= {}
+                         /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- ExistingShopyItem(shopyList[self])]
+                         /\ UNCHANGED <<syncReqQueue, syncRespQueue>>
+                      \/ /\ shopyList[self] /= {}
+                         /\ \E item \in shopyList[self]: ~item.bought
+                         /\ LET modifiedItem == ExistingNotBoughtShopyItem(shopyList[self]) IN
+                              shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- modifiedItem ++ [modifiedItem EXCEPT !.bought = TRUE]]
+                         /\ UNCHANGED <<syncReqQueue, syncRespQueue>>
+                      \/ /\ \E a \in (knownNetworkClients[self] -- self):
+                              LET newRequest == NewSyncReq(self) IN
+                                syncReqQueue' = [syncReqQueue EXCEPT ![a] = Append(syncReqQueue[a], newRequest)]
+                         /\ UNCHANGED <<shopyList, syncRespQueue>>
+                      \/ /\ syncReqQueue[self] /= <<>>
+                         /\ LET syncRequest == Head(syncReqQueue[self]) IN
+                              LET mergeResult == shopyList[self] \union syncRequest.list IN
+                                LET newResp == NewSyncResp(self, mergeResult, syncRequest.id) IN
+                                  /\ syncReqQueue' = [syncReqQueue EXCEPT ![self] = Tail(syncReqQueue[self])]
+                                  /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
+                                  /\ syncRespQueue' = [syncRespQueue EXCEPT ![syncRequest.app] = Append(syncRespQueue[syncRequest.app], newResp)]
+                      \/ /\ syncRespQueue[self] /= <<>>
+                         /\ LET syncResponse == Head(syncRespQueue[self]) IN
+                              LET mergeResult == shopyList[self] \union syncResponse.list IN
+                                /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
+                                /\ syncRespQueue' = [syncRespQueue EXCEPT ![self] = Tail(syncRespQueue[self])]
+                         /\ UNCHANGED syncReqQueue
+                   /\ UNCHANGED << joinReqQueue, takenIDs, gossipFriends, 
+                                   knownNetworkClients >>
 
-Next == (\E self \in APPS: AppLoop(self))
+Next == (\E self \in APPS: ClientApp(self))
 
 Spec == /\ Init /\ [][Next]_vars
-        /\ \A self \in APPS : WF_vars(AppLoop(self))
+        /\ \A self \in APPS : WF_vars(ClientApp(self))
 
 \* END TRANSLATION 
 
 TypeOK ==
     /\ \A a \in APPS: 
-        /\ PT!Range(actionHistory[a]) \subseteq Actions
         /\ shopyList[a] \subseteq ShopyItems
         /\ PT!Range(syncReqQueue[a]) \subseteq SyncMsgs
         /\ PT!Range(syncRespQueue[a]) \subseteq SyncMsgs
-        /\ msgsLog \subseteq SyncMsgs
+    /\ PT!Range(joinReqQueue) \subseteq JoinMsgs
+    /\ knownNetworkClients \subseteq APPS
+    /\ gossipFriends \subseteq APPS
     /\ takenIDs \subseteq IDs
-
-SyncIntendAlwaysSucceeds ==
-    \A id \in IDs:
-        (\E req \in msgsLog: req.id = id /\ req.type = REQ_SYNC_ACTION)
-        ~> (\E resp \in msgsLog: 
-                resp.id = id /\ resp.type = RESP_SYNC_ACTION)
 
 =============================================================================
 \* Modification History
-\* Last modified Sat Mar 06 23:12:33 CET 2021 by davd
+\* Last modified Sun Mar 07 23:12:31 CET 2021 by davd
 \* Created Tue Mar 02 12:33:43 CET 2021 by davd

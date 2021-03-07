@@ -2,7 +2,7 @@
 <launchConfiguration type="org.lamport.tla.toolbox.tool.tlc.modelCheck">
     <stringAttribute key="TLCCmdLineParameters" value=""/>
     <intAttribute key="collectCoverage" value="0"/>
-    <stringAttribute key="configurationName" value="SafetyFirst"/>
+    <stringAttribute key="configurationName" value="EventuallySyncs"/>
     <booleanAttribute key="deferLiveness" value="false"/>
     <intAttribute key="dfidDepth" value="100"/>
     <booleanAttribute key="dfidMode" value="false"/>
@@ -12,7 +12,7 @@
     <stringAttribute key="distributedTLC" value="off"/>
     <stringAttribute key="distributedTLCVMArgs" value=""/>
     <intAttribute key="fpBits" value="1"/>
-    <intAttribute key="fpIndex" value="44"/>
+    <intAttribute key="fpIndex" value="97"/>
     <booleanAttribute key="fpIndexRandom" value="true"/>
     <intAttribute key="maxHeapSize" value="80"/>
     <intAttribute key="maxSetSize" value="1000000"/>
@@ -20,8 +20,8 @@
     <stringAttribute key="modelBehaviorInit" value=""/>
     <stringAttribute key="modelBehaviorNext" value=""/>
     <stringAttribute key="modelBehaviorSpec" value="Spec"/>
-    <intAttribute key="modelBehaviorSpecType" value="1"/>
-    <stringAttribute key="modelBehaviorVars" value="takenIDs, actionHistory, shopyList, msgsLog, syncRespQueue, syncReqQueue"/>
+    <intAttribute key="modelBehaviorSpecType" value="0"/>
+    <stringAttribute key="modelBehaviorVars" value="takenIDs, knownNetworkClients, shopyList, gossipFriends, syncRespQueue, syncReqQueue"/>
     <stringAttribute key="modelComments" value=""/>
     <booleanAttribute key="modelCorrectnessCheckDeadlock" value="true"/>
     <listAttribute key="modelCorrectnessInvariants">
@@ -29,15 +29,15 @@
     </listAttribute>
     <listAttribute key="modelCorrectnessProperties">
         <listEntry value="0Termination"/>
-        <listEntry value="1SyncIntendAlwaysSucceeds"/>
     </listAttribute>
     <intAttribute key="modelEditorOpenTabs" value="14"/>
-    <stringAttribute key="modelExpressionEval" value=""/>
+    <stringAttribute key="modelExpressionEval" value="{apps \in (APPS \X APPS): apps[1] /= apps[2]}"/>
     <stringAttribute key="modelParameterActionConstraint" value=""/>
     <listAttribute key="modelParameterConstants">
-        <listEntry value="ITEM_IDs;;1..5;0;0"/>
-        <listEntry value="APPS;;{a1, a2};1;0"/>
+        <listEntry value="APPS;;{a1, a2, a3};1;0"/>
         <listEntry value="IDs;;1..10;0;0"/>
+        <listEntry value="PRODUCTS;;{banane, orange, fenouil};1;0"/>
+        <listEntry value="GATEAPP;;a1;0;0"/>
     </listAttribute>
     <stringAttribute key="modelParameterContraint" value=""/>
     <listAttribute key="modelParameterDefinitions"/>
