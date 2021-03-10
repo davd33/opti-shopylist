@@ -12,7 +12,7 @@
     <stringAttribute key="distributedTLC" value="off"/>
     <stringAttribute key="distributedTLCVMArgs" value=""/>
     <intAttribute key="fpBits" value="1"/>
-    <intAttribute key="fpIndex" value="97"/>
+    <intAttribute key="fpIndex" value="66"/>
     <booleanAttribute key="fpIndexRandom" value="true"/>
     <intAttribute key="maxHeapSize" value="80"/>
     <intAttribute key="maxSetSize" value="1000000"/>
@@ -20,8 +20,8 @@
     <stringAttribute key="modelBehaviorInit" value=""/>
     <stringAttribute key="modelBehaviorNext" value=""/>
     <stringAttribute key="modelBehaviorSpec" value="Spec"/>
-    <intAttribute key="modelBehaviorSpecType" value="0"/>
-    <stringAttribute key="modelBehaviorVars" value="takenIDs, knownNetworkClients, shopyList, gossipFriends, syncRespQueue, syncReqQueue"/>
+    <intAttribute key="modelBehaviorSpecType" value="1"/>
+    <stringAttribute key="modelBehaviorVars" value="joinReqQueue, takenIDs, knownNetworkClients, shopyList, gossipFriends, syncRespQueue, joinRespQueue, syncReqQueue"/>
     <stringAttribute key="modelComments" value=""/>
     <booleanAttribute key="modelCorrectnessCheckDeadlock" value="true"/>
     <listAttribute key="modelCorrectnessInvariants">
@@ -31,13 +31,13 @@
         <listEntry value="0Termination"/>
     </listAttribute>
     <intAttribute key="modelEditorOpenTabs" value="14"/>
-    <stringAttribute key="modelExpressionEval" value="{apps \in (APPS \X APPS): apps[1] /= apps[2]}"/>
+    <stringAttribute key="modelExpressionEval" value=""/>
     <stringAttribute key="modelParameterActionConstraint" value=""/>
     <listAttribute key="modelParameterConstants">
-        <listEntry value="APPS;;{a1, a2, a3};1;0"/>
+        <listEntry value="APPS;;{&quot;a1&quot;, &quot;a2&quot;, &quot;a3&quot;};0;0"/>
         <listEntry value="IDs;;1..10;0;0"/>
-        <listEntry value="PRODUCTS;;{banane, orange, fenouil};1;0"/>
-        <listEntry value="GATEAPP;;a1;0;0"/>
+        <listEntry value="PRODUCTS;;{&quot;banane&quot;, &quot;orange&quot;, &quot;fenouil&quot;};0;0"/>
+        <listEntry value="GATEAPPS;;{&quot;a1&quot;,&quot;a3&quot;};0;0"/>
     </listAttribute>
     <stringAttribute key="modelParameterContraint" value=""/>
     <listAttribute key="modelParameterDefinitions"/>
@@ -52,6 +52,7 @@
     <intAttribute key="simuSeed" value="-1"/>
     <stringAttribute key="specName" value="OptiShopyList"/>
     <stringAttribute key="tlcResourcesProfile" value="local most"/>
+    <listAttribute key="traceExploreExpressions"/>
     <stringAttribute key="view" value=""/>
     <booleanAttribute key="visualizeStateGraph" value="false"/>
 </launchConfiguration>

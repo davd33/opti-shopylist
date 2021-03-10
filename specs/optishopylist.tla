@@ -1,7 +1,9 @@
 --------------------------- MODULE optishopylist ---------------------------
 
 EXTENDS TLC, Integers, FiniteSets, Sequences
-CONSTANTS PRODUCTS, APPS, IDs, GATEAPP
+
+CONSTANTS PRODUCTS, APPS, IDs
+ASSUME Cardinality(APPS) > 0
 
 PT == INSTANCE PT
 
@@ -50,10 +52,12 @@ SyncMsgs ==
 (***************************************************************************)
 (* Messages sent for joining the network.                                  *)
 (***************************************************************************)
-JoinMsgs ==
+JoinRespMsgs ==
     [app: APPS,
-     knownHosts: SUBSET APPS,
-     assignedGossipFriends: {apps \in (APPS \X APPS): apps[1] /= apps[2]}]
+     knownHosts: SUBSET APPS]
+
+JoinReqMsgs ==
+    [app: APPS]
 
 (***************************************************************************)
 (* The spec now depicts a shopping-list app where the server app manages   *)
@@ -64,6 +68,8 @@ JoinMsgs ==
 (* --algorithm OptiShopyList
 
 variable
+    \* whether an app is a gate
+    isGate = [a \in APPS |-> FALSE],
     \* one shopping list for all APPS
     shopyList = [a \in APPS |-> {}],
     \* sync requests for all APPS
@@ -71,7 +77,8 @@ variable
     \* sync responses for all APPS
     syncRespQueue = [a \in APPS |-> <<>>],
     \* join to network requests
-    joinReqQueue = <<>>,
+    joinReqQueue = [a \in APPS |-> <<>>],
+    joinRespQueue = [a \in APPS |-> <<>>],
     \* set of taken IDs
     takenIDs = {};
 
@@ -114,7 +121,14 @@ define
     (***********************************************************************)
     (* Helpers for the decentralized network features.                     *)
     (***********************************************************************)
-    IsGate(app) == app = GATEAPP
+    
+    NewJoinReqMsg(app) == [app |-> app]
+    
+    NewJoinRespMsg(app, hosts) ==
+        [app |-> app,
+         knownHosts |-> hosts]
+    
+    GateApps == {a \in APPS: isGate[a]}
 end define;
 
 (***************************************************************************)
@@ -135,8 +149,30 @@ begin AppLoop:
     while TRUE do
         
         either
-            \* JOIN NETWORK
-            skip;
+            \* SEND JOIN REQUEST
+            with a \in GateApps do
+                joinReqQueue[a] := Append(joinReqQueue[a], NewJoinReqMsg(self));
+            end with;
+        or
+            \* RCV JOIN REQUEST
+            if isGate then
+                await joinReqQueue[self] /= <<>>;
+                with joinRequest = Head(joinReqQueue[self]),
+                     updatedKnownClients = knownNetworkClients ++ joinRequest.app do
+                    
+                    knownNetworkClients := updatedKnownClients;
+                    joinRespQueue[joinRequest.app] := Append(
+                        joinRespQueue[joinRequest.app], 
+                        NewJoinRespMsg(self, knownNetworkClients));
+                    joinReqQueue[self] := Tail(joinReqQueue[self]);
+                end with;
+            end if;
+        or
+            await joinRespQueue[self] /= <<>>;
+            with joinResponse = Head(joinRespQueue[self]) do
+                gossipFriends := joinResponse.assignedGossipFriends;
+                knownNetworkClients := joinResponse.knownHosts;
+            end with;
         or
             \* ADD
             await Cardinality(shopyList[self]) < Cardinality(PRODUCTS);
@@ -146,7 +182,7 @@ begin AppLoop:
             await shopyList[self] /= {};
             shopyList[self] := shopyList[self] -- ExistingShopyItem(shopyList[self]);
         or
-            \* set to BOUGHT
+            \* SET TO BOUGHT
             await shopyList[self] /= {};
             await \E item \in shopyList[self]: ~item.bought;
             with modifiedItem = ExistingNotBoughtShopyItem(shopyList[self]) do
@@ -154,10 +190,8 @@ begin AppLoop:
             end with;
         or
             \* SEND SYNC REQUEST
-            with a \in (knownNetworkClients -- self), 
-                 newRequest = NewSyncReq(self) do
-                
-                syncReqQueue[a] := Append(syncReqQueue[a], newRequest);
+            with a \in (knownNetworkClients -- self) do
+                syncReqQueue[a] := Append(syncReqQueue[a], NewSyncReq(self));
             end with;
         or
             \* RCV SYNC REQUEST
@@ -186,8 +220,9 @@ end process;
 
 end algorithm;
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "fd35c6b5" /\ chksum(tla) = "eea1508f")
-VARIABLES shopyList, syncReqQueue, syncRespQueue, joinReqQueue, takenIDs
+\* BEGIN TRANSLATION (chksum(pcal) = "2e4997db" /\ chksum(tla) = "403a232a")
+VARIABLES isGate, shopyList, syncReqQueue, syncRespQueue, joinReqQueue, 
+          joinRespQueue, takenIDs
 
 (* define statement *)
 NewShopyItem(list) ==
@@ -224,42 +259,70 @@ NewSyncResp(app, mergeResult, id) ==
 
 
 
-IsGate(app) == app = GATEAPP
+
+NewJoinReqMsg(app) == [app |-> app]
+
+NewJoinRespMsg(app, hosts) ==
+    [app |-> app,
+     knownHosts |-> hosts]
+
+GateApps == {a \in APPS: isGate[a]}
 
 VARIABLES gossipFriends, knownNetworkClients
 
-vars == << shopyList, syncReqQueue, syncRespQueue, joinReqQueue, takenIDs, 
-           gossipFriends, knownNetworkClients >>
+vars == << isGate, shopyList, syncReqQueue, syncRespQueue, joinReqQueue, 
+           joinRespQueue, takenIDs, gossipFriends, knownNetworkClients >>
 
 ProcSet == (APPS)
 
 Init == (* Global variables *)
+        /\ isGate = [a \in APPS |-> FALSE]
         /\ shopyList = [a \in APPS |-> {}]
         /\ syncReqQueue = [a \in APPS |-> <<>>]
         /\ syncRespQueue = [a \in APPS |-> <<>>]
-        /\ joinReqQueue = <<>>
+        /\ joinReqQueue = [a \in APPS |-> <<>>]
+        /\ joinRespQueue = [a \in APPS |-> <<>>]
         /\ takenIDs = {}
         (* Process ClientApp *)
         /\ gossipFriends = [self \in APPS |-> {}]
         /\ knownNetworkClients = [self \in APPS |-> {}]
 
-ClientApp(self) == /\ \/ /\ TRUE
-                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue>>
+ClientApp(self) == /\ \/ /\ \E a \in GateApps:
+                              joinReqQueue' = [joinReqQueue EXCEPT ![a] = Append(joinReqQueue[a], NewJoinReqMsg(self))]
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinRespQueue, gossipFriends, knownNetworkClients>>
+                      \/ /\ IF isGate
+                               THEN /\ joinReqQueue[self] /= <<>>
+                                    /\ LET joinRequest == Head(joinReqQueue[self]) IN
+                                         LET updatedKnownClients == knownNetworkClients[self] ++ joinRequest.app IN
+                                           /\ knownNetworkClients' = [knownNetworkClients EXCEPT ![self] = updatedKnownClients]
+                                           /\ joinRespQueue' = [joinRespQueue EXCEPT ![joinRequest.app] =                               Append(
+                                                                                                          joinRespQueue[joinRequest.app],
+                                                                                                          NewJoinRespMsg(self, knownNetworkClients'[self]))]
+                                           /\ joinReqQueue' = [joinReqQueue EXCEPT ![self] = Tail(joinReqQueue[self])]
+                               ELSE /\ TRUE
+                                    /\ UNCHANGED << joinReqQueue, 
+                                                    joinRespQueue, 
+                                                    knownNetworkClients >>
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, gossipFriends>>
+                      \/ /\ joinRespQueue[self] /= <<>>
+                         /\ LET joinResponse == Head(joinRespQueue[self]) IN
+                              /\ gossipFriends' = [gossipFriends EXCEPT ![self] = joinResponse.assignedGossipFriends]
+                              /\ knownNetworkClients' = [knownNetworkClients EXCEPT ![self] = joinResponse.knownHosts]
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue>>
                       \/ /\ Cardinality(shopyList[self]) < Cardinality(PRODUCTS)
                          /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] ++ NewShopyItem(shopyList[self])]
-                         /\ UNCHANGED <<syncReqQueue, syncRespQueue>>
+                         /\ UNCHANGED <<syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, gossipFriends, knownNetworkClients>>
                       \/ /\ shopyList[self] /= {}
                          /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- ExistingShopyItem(shopyList[self])]
-                         /\ UNCHANGED <<syncReqQueue, syncRespQueue>>
+                         /\ UNCHANGED <<syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, gossipFriends, knownNetworkClients>>
                       \/ /\ shopyList[self] /= {}
                          /\ \E item \in shopyList[self]: ~item.bought
                          /\ LET modifiedItem == ExistingNotBoughtShopyItem(shopyList[self]) IN
                               shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- modifiedItem ++ [modifiedItem EXCEPT !.bought = TRUE]]
-                         /\ UNCHANGED <<syncReqQueue, syncRespQueue>>
+                         /\ UNCHANGED <<syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, gossipFriends, knownNetworkClients>>
                       \/ /\ \E a \in (knownNetworkClients[self] -- self):
-                              LET newRequest == NewSyncReq(self) IN
-                                syncReqQueue' = [syncReqQueue EXCEPT ![a] = Append(syncReqQueue[a], newRequest)]
-                         /\ UNCHANGED <<shopyList, syncRespQueue>>
+                              syncReqQueue' = [syncReqQueue EXCEPT ![a] = Append(syncReqQueue[a], NewSyncReq(self))]
+                         /\ UNCHANGED <<shopyList, syncRespQueue, joinReqQueue, joinRespQueue, gossipFriends, knownNetworkClients>>
                       \/ /\ syncReqQueue[self] /= <<>>
                          /\ LET syncRequest == Head(syncReqQueue[self]) IN
                               LET mergeResult == shopyList[self] \union syncRequest.list IN
@@ -267,33 +330,62 @@ ClientApp(self) == /\ \/ /\ TRUE
                                   /\ syncReqQueue' = [syncReqQueue EXCEPT ![self] = Tail(syncReqQueue[self])]
                                   /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
                                   /\ syncRespQueue' = [syncRespQueue EXCEPT ![syncRequest.app] = Append(syncRespQueue[syncRequest.app], newResp)]
+                         /\ UNCHANGED <<joinReqQueue, joinRespQueue, gossipFriends, knownNetworkClients>>
                       \/ /\ syncRespQueue[self] /= <<>>
                          /\ LET syncResponse == Head(syncRespQueue[self]) IN
                               LET mergeResult == shopyList[self] \union syncResponse.list IN
                                 /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
                                 /\ syncRespQueue' = [syncRespQueue EXCEPT ![self] = Tail(syncRespQueue[self])]
-                         /\ UNCHANGED syncReqQueue
-                   /\ UNCHANGED << joinReqQueue, takenIDs, gossipFriends, 
-                                   knownNetworkClients >>
+                         /\ UNCHANGED <<syncReqQueue, joinReqQueue, joinRespQueue, gossipFriends, knownNetworkClients>>
+                   /\ UNCHANGED << isGate, takenIDs >>
 
 Next == (\E self \in APPS: ClientApp(self))
 
 Spec == /\ Init /\ [][Next]_vars
         /\ \A self \in APPS : WF_vars(ClientApp(self))
 
-\* END TRANSLATION 
+\* END TRANSLATION
+
+CountNumberOfGossips(app) ==
+    PT!ReduceSet(
+        LAMBDA a, acc: acc + (IF app \in gossipFriends[a]
+                              THEN 1 ELSE 0),
+        APPS,
+        0)
+
+(***************************************************************************)
+(* This invariant states that on each state we have                        *)
+(* every app in the system be the gossip friend of                         *)
+(* N+1 or N-1 other apps; N being the number of gossip                     *)
+(* friends each app is assigned to.                                        *)
+(***************************************************************************)
+NumberOfGossipsBalanced(app) ==
+    LET N == 2
+    IN \/ CountNumberOfGossips(app) = N
+       \/ CountNumberOfGossips(app) = N + 1
+       \/ CountNumberOfGossips(app) = N - 1
 
 TypeOK ==
     /\ \A a \in APPS: 
         /\ shopyList[a] \subseteq ShopyItems
         /\ PT!Range(syncReqQueue[a]) \subseteq SyncMsgs
         /\ PT!Range(syncRespQueue[a]) \subseteq SyncMsgs
-    /\ PT!Range(joinReqQueue) \subseteq JoinMsgs
-    /\ knownNetworkClients \subseteq APPS
-    /\ gossipFriends \subseteq APPS
+        /\ IF isGate[a]
+            THEN PT!Range(joinReqQueue[a]) \subseteq JoinReqMsgs
+            ELSE TRUE
+        /\ PT!Range(joinRespQueue[a]) \subseteq JoinRespMsgs
+        /\ knownNetworkClients[a] \subseteq APPS
+        /\ gossipFriends[a] \subseteq APPS
+        /\ \/ /\ gossipFriends[a] /= {}
+              /\ knownNetworkClients[a] /= {}
+              /\ a \notin gossipFriends[a]
+              /\ a \in knownNetworkClients[a]
+           \/ /\ gossipFriends[a] = {}
+              /\ knownNetworkClients[a] = {}
+\*        /\ NumberOfGossipsBalanced(a)
     /\ takenIDs \subseteq IDs
 
 =============================================================================
 \* Modification History
-\* Last modified Sun Mar 07 23:12:31 CET 2021 by davd
+\* Last modified Wed Mar 10 07:51:37 CET 2021 by davd
 \* Created Tue Mar 02 12:33:43 CET 2021 by davd
