@@ -1,6 +1,6 @@
 --------------------------- MODULE optishopylist ---------------------------
 
-EXTENDS TLC, Integers, FiniteSets, Sequences
+EXTENDS TLC, Integers, FiniteSets, Sequences, Reals
 
 CONSTANTS PRODUCTS, APPS, IDs
 ASSUME Cardinality(APPS) > 0
@@ -138,6 +138,17 @@ define
     GateApps == {a \in APPS: isGate[a]}
     
     NewJoinerNotifReq(app) == [app |-> app]
+    
+    PickGossipFriends(app, knownApps) ==
+        LET Opposit ==
+                PT!Index(knownApps, app) + (Len(knownApps) \div 2) - (Len(knownApps) % 2)
+                
+            PreviousIndex(i) ==
+                IF i = 1 THEN Len(knownApps) ELSE i - 1
+           
+            NextIndex(i) ==
+                IF i = Len(knownApps) THEN 1 ELSE i + 1
+        IN {PreviousIndex(Opposit), NextIndex(Opposit)}
 end define;
 
 macro Notify(gossipFriends, newJoiner)
@@ -160,7 +171,7 @@ end macro;
 fair process ClientApp \in APPS
 variables
     gossipFriends = {},
-    knownApps = {};
+    knownApps = <<self>>;
 
 begin AppLoop:
     while TRUE do
@@ -168,6 +179,8 @@ begin AppLoop:
         (*******************************************************************)
         (* The 2 actions below set the current app instance                *)
         (* to be a Gate to the network or not to be.                       *)
+        (* When an app stops being a Gate, it rejects all existing         *)
+        (* join requests.                                                  *)
         (*******************************************************************)
         either
             \* BECOME A GATE
@@ -175,24 +188,27 @@ begin AppLoop:
         or
             \* STOP BEING A GATE
             isGate[self] := FALSE;
+            joinReqQueue[self] := <<>>;
             
         (*******************************************************************)
         (* Below are actions to manage the connection to the network.      *)
         (*******************************************************************)
         or
             \* SEND JOIN REQUEST
-            with a \in GateApps 
+            with a \in (GateApps -- self)
             do
                 joinReqQueue[a] := Append(joinReqQueue[a], NewJoinReqMsg(self));
             end with;
         or
-            \* RCV JOIN REQUEST
+            \* RESPOND TO JOIN REQUEST
             if isGate[self] then
                 await joinReqQueue[self] /= <<>>;
-                with joinRequest = Head(joinReqQueue[self])
+                with joinRequest = Head(joinReqQueue[self]),
+                     updatedKnownApps = Append(knownApps, joinRequest.app)
                 do
                     
-                    knownApps := knownApps ++ joinRequest.app;
+                    knownApps := updatedKnownApps;
+                    gossipFriends := PickGossipFriends(self, updatedKnownApps);
                     
                     joinRespQueue[joinRequest.app] := Append(
                         joinRespQueue[joinRequest.app], 
@@ -202,12 +218,14 @@ begin AppLoop:
                 end with;
             end if;
         or
-            \* RCV JOIN RESPONSE
+            \* RECEIVE JOIN RESPONSE
             await joinRespQueue[self] /= <<>>;
             with joinResponse = Head(joinRespQueue[self]) 
             do
-                gossipFriends := joinResponse.assignedGossipFriends;
+                gossipFriends := PickGossipFriends(self, joinResponse.knownHosts);
                 knownApps := joinResponse.knownHosts;
+                        
+                joinRespQueue[self] := Tail(joinRespQueue[self]);
             end with;
             
         (*******************************************************************)
@@ -236,7 +254,7 @@ begin AppLoop:
         (*******************************************************************)
         or
             \* SEND SYNC REQUEST
-            with a \in (knownApps -- self) 
+            with a \in (PT!Range(knownApps) -- self) 
             do
                 syncReqQueue[a] := Append(syncReqQueue[a], NewSyncReq(self));
             end with;
@@ -269,7 +287,7 @@ end process;
 
 end algorithm;
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "e7becbeb" /\ chksum(tla) = "11cc3074")
+\* BEGIN TRANSLATION (chksum(pcal) = "1eb6a4e4" /\ chksum(tla) = "9363f761")
 VARIABLES isGate, shopyList, syncReqQueue, syncRespQueue, joinReqQueue, 
           joinRespQueue, newJoinerNotif, takenIDs
 
@@ -319,6 +337,17 @@ GateApps == {a \in APPS: isGate[a]}
 
 NewJoinerNotifReq(app) == [app |-> app]
 
+PickGossipFriends(app, knownApps) ==
+    LET Opposit ==
+            PT!Index(knownApps, app) + (Len(knownApps) \div 2) - (Len(knownApps) % 2)
+
+        PreviousIndex(i) ==
+            IF i = 1 THEN Len(knownApps) ELSE i - 1
+
+        NextIndex(i) ==
+            IF i = Len(knownApps) THEN 1 ELSE i + 1
+    IN {PreviousIndex(Opposit), NextIndex(Opposit)}
+
 VARIABLES gossipFriends, knownApps
 
 vars == << isGate, shopyList, syncReqQueue, syncRespQueue, joinReqQueue, 
@@ -338,32 +367,37 @@ Init == (* Global variables *)
         /\ takenIDs = {}
         (* Process ClientApp *)
         /\ gossipFriends = [self \in APPS |-> {}]
-        /\ knownApps = [self \in APPS |-> {}]
+        /\ knownApps = [self \in APPS |-> <<self>>]
 
 ClientApp(self) == /\ \/ /\ isGate' = [isGate EXCEPT ![self] = TRUE]
                          /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, gossipFriends, knownApps>>
                       \/ /\ isGate' = [isGate EXCEPT ![self] = FALSE]
-                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, gossipFriends, knownApps>>
-                      \/ /\ \E a \in GateApps:
+                         /\ joinReqQueue' = [joinReqQueue EXCEPT ![self] = <<>>]
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinRespQueue, gossipFriends, knownApps>>
+                      \/ /\ \E a \in (GateApps -- self):
                               joinReqQueue' = [joinReqQueue EXCEPT ![a] = Append(joinReqQueue[a], NewJoinReqMsg(self))]
                          /\ UNCHANGED <<isGate, shopyList, syncReqQueue, syncRespQueue, joinRespQueue, gossipFriends, knownApps>>
                       \/ /\ IF isGate[self]
                                THEN /\ joinReqQueue[self] /= <<>>
                                     /\ LET joinRequest == Head(joinReqQueue[self]) IN
-                                         /\ knownApps' = [knownApps EXCEPT ![self] = knownApps[self] ++ joinRequest.app]
-                                         /\ joinRespQueue' = [joinRespQueue EXCEPT ![joinRequest.app] =                               Append(
-                                                                                                        joinRespQueue[joinRequest.app],
-                                                                                                        NewJoinRespMsg(self, knownApps'[self]))]
-                                         /\ joinReqQueue' = [joinReqQueue EXCEPT ![self] = Tail(joinReqQueue[self])]
+                                         LET updatedKnownApps == Append(knownApps[self], joinRequest.app) IN
+                                           /\ knownApps' = [knownApps EXCEPT ![self] = updatedKnownApps]
+                                           /\ gossipFriends' = [gossipFriends EXCEPT ![self] = PickGossipFriends(self, updatedKnownApps)]
+                                           /\ joinRespQueue' = [joinRespQueue EXCEPT ![joinRequest.app] =                               Append(
+                                                                                                          joinRespQueue[joinRequest.app],
+                                                                                                          NewJoinRespMsg(self, knownApps'[self]))]
+                                           /\ joinReqQueue' = [joinReqQueue EXCEPT ![self] = Tail(joinReqQueue[self])]
                                ELSE /\ TRUE
                                     /\ UNCHANGED << joinReqQueue, 
-                                                    joinRespQueue, knownApps >>
-                         /\ UNCHANGED <<isGate, shopyList, syncReqQueue, syncRespQueue, gossipFriends>>
+                                                    joinRespQueue, 
+                                                    gossipFriends, knownApps >>
+                         /\ UNCHANGED <<isGate, shopyList, syncReqQueue, syncRespQueue>>
                       \/ /\ joinRespQueue[self] /= <<>>
                          /\ LET joinResponse == Head(joinRespQueue[self]) IN
-                              /\ gossipFriends' = [gossipFriends EXCEPT ![self] = joinResponse.assignedGossipFriends]
+                              /\ gossipFriends' = [gossipFriends EXCEPT ![self] = PickGossipFriends(self, joinResponse.knownHosts)]
                               /\ knownApps' = [knownApps EXCEPT ![self] = joinResponse.knownHosts]
-                         /\ UNCHANGED <<isGate, shopyList, syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue>>
+                              /\ joinRespQueue' = [joinRespQueue EXCEPT ![self] = Tail(joinRespQueue[self])]
+                         /\ UNCHANGED <<isGate, shopyList, syncReqQueue, syncRespQueue, joinReqQueue>>
                       \/ /\ Cardinality(shopyList[self]) < Cardinality(PRODUCTS)
                          /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] ++ NewShopyItem(shopyList[self])]
                          /\ UNCHANGED <<isGate, syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, gossipFriends, knownApps>>
@@ -375,7 +409,7 @@ ClientApp(self) == /\ \/ /\ isGate' = [isGate EXCEPT ![self] = TRUE]
                          /\ LET modifiedItem == ExistingNotBoughtShopyItem(shopyList[self]) IN
                               shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- modifiedItem ++ [modifiedItem EXCEPT !.bought = TRUE]]
                          /\ UNCHANGED <<isGate, syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, gossipFriends, knownApps>>
-                      \/ /\ \E a \in (knownApps[self] -- self):
+                      \/ /\ \E a \in (PT!Range(knownApps[self]) -- self):
                               syncReqQueue' = [syncReqQueue EXCEPT ![a] = Append(syncReqQueue[a], NewSyncReq(self))]
                          /\ UNCHANGED <<isGate, shopyList, syncRespQueue, joinReqQueue, joinRespQueue, gossipFriends, knownApps>>
                       \/ /\ syncReqQueue[self] /= <<>>
@@ -422,26 +456,30 @@ NumberOfGossipsBalanced(app) ==
 
 TypeOK ==
     /\ \A a \in APPS: 
+        (*******************************************************************)
+        (* Checking on variables' domains.                                 *)
+        (*******************************************************************)
         /\ shopyList[a] \subseteq ShopyItems
         /\ PT!Range(syncReqQueue[a]) \subseteq SyncMsgs
         /\ PT!Range(syncRespQueue[a]) \subseteq SyncMsgs
-        /\ IF isGate[a]
-            THEN PT!Range(joinReqQueue[a]) \subseteq JoinReqMsgs
-            ELSE TRUE
+        \* The queue for join requests is only for gate apps
+        /\ IF isGate[a] 
+           THEN PT!Range(joinReqQueue[a]) \subseteq JoinReqMsgs
+                /\ \A req \in PT!Range(joinReqQueue[a]): req.app /= a
+           ELSE joinReqQueue[a] = <<>>
         /\ PT!Range(joinRespQueue[a]) \subseteq JoinRespMsgs
         /\ PT!Range(newJoinerNotif[a]) \subseteq JoinNotifMsgs
-        /\ knownApps[a] \subseteq APPS
-        /\ gossipFriends[a] \subseteq APPS
-        /\ \/ /\ gossipFriends[a] /= {}
-              /\ knownApps[a] /= {}
-              /\ a \notin gossipFriends[a]
-              /\ a \in knownApps[a]
-           \/ /\ gossipFriends[a] = {}
-              /\ knownApps[a] = {}
+        \* knownApps is a collection of unique, ordered apps.
+        /\ PT!Range(knownApps[a]) \subseteq APPS
+        \* Apps don't gossip themselves
+        /\ gossipFriends[a] \subseteq (APPS -- a)
+        \* Invariant when we're connected or not.
+        /\ gossipFriends[a] /= {}
+           <=> knownApps[a] /= <<a>>
 \*        /\ NumberOfGossipsBalanced(a)
     /\ takenIDs \subseteq IDs
 
 =============================================================================
 \* Modification History
-\* Last modified Wed Mar 10 08:24:05 CET 2021 by davd
+\* Last modified Wed Mar 10 12:55:56 CET 2021 by davd
 \* Created Tue Mar 02 12:33:43 CET 2021 by davd
