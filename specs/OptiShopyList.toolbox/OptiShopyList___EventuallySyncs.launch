@@ -12,7 +12,7 @@
     <stringAttribute key="distributedTLC" value="off"/>
     <stringAttribute key="distributedTLCVMArgs" value=""/>
     <intAttribute key="fpBits" value="1"/>
-    <intAttribute key="fpIndex" value="122"/>
+    <intAttribute key="fpIndex" value="12"/>
     <booleanAttribute key="fpIndexRandom" value="true"/>
     <intAttribute key="maxHeapSize" value="80"/>
     <intAttribute key="maxSetSize" value="1000000"/>
@@ -26,19 +26,20 @@
     <booleanAttribute key="modelCorrectnessCheckDeadlock" value="true"/>
     <listAttribute key="modelCorrectnessInvariants">
         <listEntry value="1TypeOK"/>
+        <listEntry value="1GossipInvariants"/>
     </listAttribute>
     <listAttribute key="modelCorrectnessProperties">
         <listEntry value="0Termination"/>
         <listEntry value="1Liveness"/>
     </listAttribute>
     <intAttribute key="modelEditorOpenTabs" value="14"/>
-    <stringAttribute key="modelExpressionEval" value="AverageGossipOf([a1 |-&gt; {&quot;a2&quot;,&quot;a3&quot;}, a2 |-&gt; {&quot;a3&quot;,&quot;a1&quot;}, a3 |-&gt; {&quot;a2&quot;,&quot;a1&quot;}], [a1 |-&gt; TRUE, a2 |-&gt; FALSE, a3 |-&gt; FALSE])"/>
+    <stringAttribute key="modelExpressionEval" value="PickGossipFriends(&quot;a1&quot;, &lt;&lt;&quot;a1&quot;, &quot;a2&quot;&gt;&gt;)"/>
     <stringAttribute key="modelParameterActionConstraint" value=""/>
     <listAttribute key="modelParameterConstants">
-        <listEntry value="APPS;;{&quot;a1&quot;, &quot;a2&quot;, &quot;a3&quot;};0;0"/>
+        <listEntry value="APPS;;{a1, a2, a3};1;0"/>
         <listEntry value="IDs;;1..10;0;0"/>
-        <listEntry value="PRODUCTS;;{&quot;banane&quot;, &quot;orange&quot;, &quot;fenouil&quot;};0;0"/>
-        <listEntry value="GATEAPPS;;{&quot;a1&quot;};0;0"/>
+        <listEntry value="PRODUCTS;;{banane, orange};1;0"/>
+        <listEntry value="GATEAPPS;;{a1};0;0"/>
     </listAttribute>
     <stringAttribute key="modelParameterContraint" value=""/>
     <listAttribute key="modelParameterDefinitions"/>
@@ -53,7 +54,11 @@
     <intAttribute key="simuSeed" value="-1"/>
     <stringAttribute key="specName" value="OptiShopyList"/>
     <stringAttribute key="tlcResourcesProfile" value="local most"/>
-    <listAttribute key="traceExploreExpressions"/>
+    <listAttribute key="traceExploreExpressions">
+        <listEntry value="1newJoinerNotif[a2] /= &lt;&lt;&gt;&gt;"/>
+        <listEntry value="1IF newJoinerNotif[a2] /= &lt;&lt;&gt;&gt;&#10;THEN Head(newJoinerNotif[a2])&#10;ELSE FALSE"/>
+        <listEntry value="1IF newJoinerNotif[a2] /= &lt;&lt;&gt;&gt;&#10;THEN Tail(newJoinerNotif[a2])&#10;ELSE FALSE"/>
+    </listAttribute>
     <stringAttribute key="view" value=""/>
     <booleanAttribute key="visualizeStateGraph" value="false"/>
 </launchConfiguration>

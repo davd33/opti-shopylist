@@ -115,7 +115,7 @@ define
          
     NewSyncReqMsg(a, l, ml, t) ==
         NewSyncMsg(
-            (CHOOSE i \in IDs: \A ti \in takenIDs: i = ti),
+            (CHOOSE i \in IDs: \A ti \in takenIDs: i /= ti),
             a, l, ml, t
         )
         
@@ -139,26 +139,34 @@ define
     
     NewJoinerNotifReq(app) == [app |-> app]
     
+    (***********************************************************************)
+    (* Amongst 'knownApps', wisely choose an element different than 'app'. *)
+    (***********************************************************************)
     PickGossipFriends(app, knownApps) ==
-        LET Opposit ==
-                PT!Index(knownApps, app) + (Len(knownApps) \div 2) - (Len(knownApps) % 2)
+        LET KnownApps ==
+                PT!ReduceSeq(
+                    LAMBDA a, acc: IF a = app THEN acc ELSE Append(acc, a),
+                    knownApps, <<>>)
+        
+            Opposit ==
+                PT!Index(KnownApps, app) + (Len(KnownApps) \div 2) - (Len(KnownApps) % 2)
                 
             PreviousIndex(i) ==
-                IF Len(knownApps) < 3
+                IF Len(KnownApps) < 3
                 THEN 1
-                ELSE IF i = 1 THEN Len(knownApps) ELSE i - 1
+                ELSE IF i = 1 THEN Len(KnownApps) ELSE i - 1
            
             NextIndex(i) ==
-                IF Len(knownApps) < 3
-                THEN Len(knownApps)
-                ELSE IF i = Len(knownApps) THEN 1 ELSE i + 1
-        IN {knownApps[PreviousIndex(Opposit)], knownApps[NextIndex(Opposit)]}
+                IF Len(KnownApps) < 3
+                THEN Len(KnownApps)
+                ELSE IF i = Len(KnownApps) THEN 1 ELSE i + 1
+                
+        IN {KnownApps[PreviousIndex(Opposit)], 
+            KnownApps[NextIndex(Opposit)]}
     
     (***********************************************************************)
-    (* Not used, it's an example of how we'd keep the ordering of          *)
-    (* the responsed knownApps sequence on joining.                        *)
-    (* If it's used, it should be with small sequences to not generate     *)
-    (* enormous sets.                                                      *)
+    (* Merge two lists of apps together without duplicating                *)
+    (* equal elements.                                                     *)
     (***********************************************************************)
     MergeKnownApps(apps1, apps2) ==
         LET AppSeq(n) == PT!SeqOf(APPS, n)
@@ -206,12 +214,12 @@ define
         IN f[<<apps1, apps2, <<>>>>]
 end define;
 
-macro Notify(gossipFriends, newJoiner)
+macro notify(apps, newJoiner)
 begin
-    with a \in gossipFriends
-    do
-        newJoinerNotif[a] := Append(newJoinerNotif[a], NewJoinerNotifReq(app));
-    end with;
+    newJoinerNotif := [a \in APPS |-> 
+        IF a \in apps
+        THEN Append(newJoinerNotif[a], NewJoinerNotifReq(newJoiner))
+        ELSE newJoinerNotif[a]];
 end macro;
 
 (***************************************************************************)
@@ -223,7 +231,7 @@ end macro;
 (*                                                                         *)
 (* We assume that every client app has only one shopy-list.                *)
 (***************************************************************************)
-fair process ClientApp \in APPS
+fair+ process ClientApp \in APPS
 variables
     joined = FALSE,
     gossipFriends = {},
@@ -233,82 +241,118 @@ begin AppLoop:
     while TRUE do
 
         (*******************************************************************)
-        (* Below are actions to manage the connection to the network.      *)
+        (* MANAGE DECENTRALIZED NETWORK                                    *)
         (*******************************************************************)
         either
             \* SEND JOIN REQUEST
+            (***************************************************************)
+            (* A client app might send a join request to any available     *)
+            (* gate app.                                                   *)
+            (***************************************************************)
+            await ~joined;
             with a \in (GateApps -- self)
             do
                 joinReqQueue[a] := Append(joinReqQueue[a], NewJoinReqMsg(self));
             end with;
         or
             \* RESPOND TO JOIN REQUEST
+            (***************************************************************)
+            (* Any gate app receiving a join request will:                 *)
+            (*   - respond with currently known joined apps,               *)
+            (*   - pick new gossip friends,                                *)
+            (*   - notify its gossip friends.                              *)
+            (***************************************************************)
             if isGate[self] then
                 await joinReqQueue[self] /= <<>>;
                 with joinRequest = Head(joinReqQueue[self]),
                      updatedKnownApps = Append(knownApps, joinRequest.app)
                 do
+                    \* PULL FROM REQ QUEUE
+                    joinReqQueue[self] := Tail(joinReqQueue[self]);
                     
+                    \* RESPOND TO REQUESTER
                     joinRespQueue[joinRequest.app] := Append(
                         joinRespQueue[joinRequest.app], 
                         NewJoinRespMsg(self, SelectSeq(knownApps, 
                             LAMBDA app: app /= joinRequest.app)));
                     
+                    \* UPDATE KNOWN APPS AND PICK NEW GOSSIP FRIENDS
                     if joinRequest.app \notin PT!Range(knownApps)
                     then
                         knownApps := updatedKnownApps;
-                        gossipFriends := PickGossipFriends(self, Tail(updatedKnownApps));
+                        gossipFriends := PickGossipFriends(self, updatedKnownApps);
                     end if;
-                        
-                    joinReqQueue[self] := Tail(joinReqQueue[self]);
                     
+                    \* NOTIFY NETWORK OF NEW JOINER
+                    notify(gossipFriends -- joinRequest.app, joinRequest.app);
+                    
+                    \* SET STATUS TO JOINED
                     joined := TRUE;
                 end with;
             end if;
         or
             \* RECEIVE JOIN RESPONSE
+            (***************************************************************)
+            (* Upon receiving a join response from a gate app, an app      *)
+            (* will have to update its known apps and pick gossip friends. *)
+            (***************************************************************)
             await joinRespQueue[self] /= <<>>;
-            with joinResponse = Head(joinRespQueue[self]),
-                 newKnownApps = PT!Range(joinResponse.knownHosts) \ PT!Range(knownApps)
+            with joinResponse = Head(joinRespQueue[self])
             do
-                gossipFriends := PickGossipFriends(self, joinResponse.knownHosts);
-                
-                knownApps := knownApps \o PT!OrderSet(newKnownApps);
-                        
+                \* PULL FROM RESP QUEUE      
                 joinRespQueue[self] := Tail(joinRespQueue[self]);
                 
+                \* UPDATE KNOWN APPS
+                knownApps := MergeKnownApps(knownApps, joinResponse.knownHosts);
+                
+                \* PICK NEW GOSSIP FRIENDS
+                gossipFriends := PickGossipFriends(self, joinResponse.knownHosts);
+                
+                \* SET STATUS TO JOINED
                 joined := TRUE;
+            end with;
+        or
+            \* RECEIVE JOIN NOTIFICATION
+            (***************************************************************)
+            (* Upon receiving a join notification from any other app,      *)
+            (* an app updates its known apps as well as its gossips.       *)
+            (***************************************************************)
+            await newJoinerNotif[self] /= <<>>;
+            with joinNotifMsg = Head(newJoinerNotif[self])
+            do
+                \* PULL FROM NOTIF QUEUE
+                newJoinerNotif[self] := Tail(newJoinerNotif[self]);
+                
+                \* UPDATE KNOWN APPS
+                knownApps := MergeKnownApps(knownApps, <<joinNotifMsg.app>>);
+                
+                \* PICK NEW GOSSIP FRIENDS
+                gossipFriends := PickGossipFriends(self, knownApps);
             end with;
             
         (*******************************************************************)
         (* Following are the actions applying to the shopy-list            *)
         (* managed by the app.                                             *)
+        (* We need to abstract actions down to one single add action       *)
+        (* in order not to have infinite loops between adding, removing    *)
+        (* and so on. User behavior must not be constrained because it     *)
+        (* cannot be controlled.                                           *)
         (*******************************************************************)            
         or
             \* ADD
             await Cardinality(shopyList[self]) < Cardinality(PRODUCTS);
             shopyList[self] := shopyList[self] ++ NewShopyItem(shopyList[self]);
-        or
-            \* REMOVE
-            await shopyList[self] /= {};
-            shopyList[self] := shopyList[self] -- ExistingShopyItem(shopyList[self]);
-        or
-            \* ITEM HAS BEEN BOUGHT
-            await shopyList[self] /= {};
-            await \E item \in shopyList[self]: ~item.bought;
-            with modifiedItem = ExistingNotBoughtShopyItem(shopyList[self]) 
-            do
-                shopyList[self] := shopyList[self] -- modifiedItem ++ [modifiedItem EXCEPT !.bought = TRUE];
-            end with;
             
         (*******************************************************************)
         (* Below actions manage the synchronization of the list.           *)
         (*******************************************************************)
         or
             \* SEND SYNC REQUEST
-            with a \in (PT!Range(knownApps) -- self) 
+            with a \in (PT!Range(knownApps) -- self),
+                 req = NewSyncReq(self)
             do
-                syncReqQueue[a] := Append(syncReqQueue[a], NewSyncReq(self));
+                takenIDs := takenIDs ++ req.id;
+                syncReqQueue[a] := Append(syncReqQueue[a], req);
             end with;
         or
             \* RCV SYNC REQUEST
@@ -339,7 +383,7 @@ end process;
 
 end algorithm;
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "a4dd4f8d" /\ chksum(tla) = "e6dbda73")
+\* BEGIN TRANSLATION (chksum(pcal) = "ec56fe87" /\ chksum(tla) = "38265ee0")
 VARIABLES isGate, shopyList, syncReqQueue, syncRespQueue, joinReqQueue, 
           joinRespQueue, newJoinerNotif, takenIDs
 
@@ -365,7 +409,7 @@ NewSyncMsg(id, a, l, ml, t) ==
 
 NewSyncReqMsg(a, l, ml, t) ==
     NewSyncMsg(
-        (CHOOSE i \in IDs: \A ti \in takenIDs: i = ti),
+        (CHOOSE i \in IDs: \A ti \in takenIDs: i /= ti),
         a, l, ml, t
     )
 
@@ -389,22 +433,30 @@ GateApps == {a \in APPS: isGate[a]}
 
 NewJoinerNotifReq(app) == [app |-> app]
 
+
+
+
 PickGossipFriends(app, knownApps) ==
-    LET Opposit ==
-            PT!Index(knownApps, app) + (Len(knownApps) \div 2) - (Len(knownApps) % 2)
+    LET KnownApps ==
+            PT!ReduceSeq(
+                LAMBDA a, acc: IF a = app THEN acc ELSE Append(acc, a),
+                knownApps, <<>>)
+
+        Opposit ==
+            PT!Index(KnownApps, app) + (Len(KnownApps) \div 2) - (Len(KnownApps) % 2)
 
         PreviousIndex(i) ==
-            IF Len(knownApps) < 3
+            IF Len(KnownApps) < 3
             THEN 1
-            ELSE IF i = 1 THEN Len(knownApps) ELSE i - 1
+            ELSE IF i = 1 THEN Len(KnownApps) ELSE i - 1
 
         NextIndex(i) ==
-            IF Len(knownApps) < 3
-            THEN Len(knownApps)
-            ELSE IF i = Len(knownApps) THEN 1 ELSE i + 1
-    IN {knownApps[PreviousIndex(Opposit)], knownApps[NextIndex(Opposit)]}
+            IF Len(KnownApps) < 3
+            THEN Len(KnownApps)
+            ELSE IF i = Len(KnownApps) THEN 1 ELSE i + 1
 
-
+    IN {KnownApps[PreviousIndex(Opposit)],
+        KnownApps[NextIndex(Opposit)]}
 
 
 
@@ -477,52 +529,57 @@ Init == (* Global variables *)
         /\ gossipFriends = [self \in APPS |-> {}]
         /\ knownApps = [self \in APPS |-> <<self>>]
 
-ClientApp(self) == /\ \/ /\ \E a \in (GateApps -- self):
+ClientApp(self) == /\ \/ /\ ~joined[self]
+                         /\ \E a \in (GateApps -- self):
                               joinReqQueue' = [joinReqQueue EXCEPT ![a] = Append(joinReqQueue[a], NewJoinReqMsg(self))]
-                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinRespQueue, joined, gossipFriends, knownApps>>
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinRespQueue, newJoinerNotif, takenIDs, joined, gossipFriends, knownApps>>
                       \/ /\ IF isGate[self]
                                THEN /\ joinReqQueue[self] /= <<>>
                                     /\ LET joinRequest == Head(joinReqQueue[self]) IN
                                          LET updatedKnownApps == Append(knownApps[self], joinRequest.app) IN
+                                           /\ joinReqQueue' = [joinReqQueue EXCEPT ![self] = Tail(joinReqQueue[self])]
                                            /\ joinRespQueue' = [joinRespQueue EXCEPT ![joinRequest.app] =                               Append(
                                                                                                           joinRespQueue[joinRequest.app],
                                                                                                           NewJoinRespMsg(self, SelectSeq(knownApps[self],
                                                                                                               LAMBDA app: app /= joinRequest.app)))]
                                            /\ IF joinRequest.app \notin PT!Range(knownApps[self])
                                                  THEN /\ knownApps' = [knownApps EXCEPT ![self] = updatedKnownApps]
-                                                      /\ gossipFriends' = [gossipFriends EXCEPT ![self] = PickGossipFriends(self, Tail(updatedKnownApps))]
+                                                      /\ gossipFriends' = [gossipFriends EXCEPT ![self] = PickGossipFriends(self, updatedKnownApps)]
                                                  ELSE /\ TRUE
                                                       /\ UNCHANGED << gossipFriends, 
                                                                       knownApps >>
-                                           /\ joinReqQueue' = [joinReqQueue EXCEPT ![self] = Tail(joinReqQueue[self])]
+                                           /\ newJoinerNotif' =               [a \in APPS |->
+                                                                IF a \in (gossipFriends'[self] -- joinRequest.app)
+                                                                THEN Append(newJoinerNotif[a], NewJoinerNotifReq((joinRequest.app)))
+                                                                ELSE newJoinerNotif[a]]
                                            /\ joined' = [joined EXCEPT ![self] = TRUE]
                                ELSE /\ TRUE
                                     /\ UNCHANGED << joinReqQueue, 
-                                                    joinRespQueue, joined, 
+                                                    joinRespQueue, 
+                                                    newJoinerNotif, joined, 
                                                     gossipFriends, knownApps >>
-                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue>>
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, takenIDs>>
                       \/ /\ joinRespQueue[self] /= <<>>
                          /\ LET joinResponse == Head(joinRespQueue[self]) IN
-                              LET newKnownApps == PT!Range(joinResponse.knownHosts) \ PT!Range(knownApps[self]) IN
-                                /\ gossipFriends' = [gossipFriends EXCEPT ![self] = PickGossipFriends(self, joinResponse.knownHosts)]
-                                /\ knownApps' = [knownApps EXCEPT ![self] = knownApps[self] \o PT!OrderSet(newKnownApps)]
-                                /\ joinRespQueue' = [joinRespQueue EXCEPT ![self] = Tail(joinRespQueue[self])]
-                                /\ joined' = [joined EXCEPT ![self] = TRUE]
-                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinReqQueue>>
+                              /\ joinRespQueue' = [joinRespQueue EXCEPT ![self] = Tail(joinRespQueue[self])]
+                              /\ knownApps' = [knownApps EXCEPT ![self] = MergeKnownApps(knownApps[self], joinResponse.knownHosts)]
+                              /\ gossipFriends' = [gossipFriends EXCEPT ![self] = PickGossipFriends(self, joinResponse.knownHosts)]
+                              /\ joined' = [joined EXCEPT ![self] = TRUE]
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinReqQueue, newJoinerNotif, takenIDs>>
+                      \/ /\ newJoinerNotif[self] /= <<>>
+                         /\ LET joinNotifMsg == Head(newJoinerNotif[self]) IN
+                              /\ newJoinerNotif' = [newJoinerNotif EXCEPT ![self] = Tail(newJoinerNotif[self])]
+                              /\ knownApps' = [knownApps EXCEPT ![self] = MergeKnownApps(knownApps[self], <<joinNotifMsg.app>>)]
+                              /\ gossipFriends' = [gossipFriends EXCEPT ![self] = PickGossipFriends(self, knownApps'[self])]
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, takenIDs, joined>>
                       \/ /\ Cardinality(shopyList[self]) < Cardinality(PRODUCTS)
                          /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] ++ NewShopyItem(shopyList[self])]
-                         /\ UNCHANGED <<syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, joined, gossipFriends, knownApps>>
-                      \/ /\ shopyList[self] /= {}
-                         /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- ExistingShopyItem(shopyList[self])]
-                         /\ UNCHANGED <<syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, joined, gossipFriends, knownApps>>
-                      \/ /\ shopyList[self] /= {}
-                         /\ \E item \in shopyList[self]: ~item.bought
-                         /\ LET modifiedItem == ExistingNotBoughtShopyItem(shopyList[self]) IN
-                              shopyList' = [shopyList EXCEPT ![self] = shopyList[self] -- modifiedItem ++ [modifiedItem EXCEPT !.bought = TRUE]]
-                         /\ UNCHANGED <<syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, joined, gossipFriends, knownApps>>
+                         /\ UNCHANGED <<syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, newJoinerNotif, takenIDs, joined, gossipFriends, knownApps>>
                       \/ /\ \E a \in (PT!Range(knownApps[self]) -- self):
-                              syncReqQueue' = [syncReqQueue EXCEPT ![a] = Append(syncReqQueue[a], NewSyncReq(self))]
-                         /\ UNCHANGED <<shopyList, syncRespQueue, joinReqQueue, joinRespQueue, joined, gossipFriends, knownApps>>
+                              LET req == NewSyncReq(self) IN
+                                /\ takenIDs' = takenIDs ++ req.id
+                                /\ syncReqQueue' = [syncReqQueue EXCEPT ![a] = Append(syncReqQueue[a], req)]
+                         /\ UNCHANGED <<shopyList, syncRespQueue, joinReqQueue, joinRespQueue, newJoinerNotif, joined, gossipFriends, knownApps>>
                       \/ /\ syncReqQueue[self] /= <<>>
                          /\ LET syncRequest == Head(syncReqQueue[self]) IN
                               LET mergeResult == shopyList[self] \union syncRequest.list IN
@@ -530,40 +587,54 @@ ClientApp(self) == /\ \/ /\ \E a \in (GateApps -- self):
                                   /\ syncReqQueue' = [syncReqQueue EXCEPT ![self] = Tail(syncReqQueue[self])]
                                   /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
                                   /\ syncRespQueue' = [syncRespQueue EXCEPT ![syncRequest.app] = Append(syncRespQueue[syncRequest.app], newResp)]
-                         /\ UNCHANGED <<joinReqQueue, joinRespQueue, joined, gossipFriends, knownApps>>
+                         /\ UNCHANGED <<joinReqQueue, joinRespQueue, newJoinerNotif, takenIDs, joined, gossipFriends, knownApps>>
                       \/ /\ syncRespQueue[self] /= <<>>
                          /\ LET syncResponse == Head(syncRespQueue[self]) IN
                               LET mergeResult == shopyList[self] \union syncResponse.list IN
                                 /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
                                 /\ syncRespQueue' = [syncRespQueue EXCEPT ![self] = Tail(syncRespQueue[self])]
-                         /\ UNCHANGED <<syncReqQueue, joinReqQueue, joinRespQueue, joined, gossipFriends, knownApps>>
-                   /\ UNCHANGED << isGate, newJoinerNotif, takenIDs >>
+                         /\ UNCHANGED <<syncReqQueue, joinReqQueue, joinRespQueue, newJoinerNotif, takenIDs, joined, gossipFriends, knownApps>>
+                   /\ UNCHANGED isGate
 
 Next == (\E self \in APPS: ClientApp(self))
 
 Spec == /\ Init /\ [][Next]_vars
-        /\ \A self \in APPS : WF_vars(ClientApp(self))
+        /\ \A self \in APPS : SF_vars(ClientApp(self))
 
 \* END TRANSLATION
 
+(***************************************************************************)
+(* There's no duplicated items in the sequence 'seq'.                      *)
+(***************************************************************************)
 NoDuplicates(seq) ==
     \A i, j \in DOMAIN seq:
         i /= j => seq[i] /= seq[j]
 
-JoinedApps(joinedApps) == {j \in APPS: joinedApps[j]}
+(***************************************************************************)
+(* All apps in 'joinedApps' that joined the network.                       *)
+(***************************************************************************)
+JoinedApps(joinedF, apps) == {j \in apps: joinedF[j]}
 
+(***************************************************************************)
+(* The count of gossips for an app 'a' is the number of other joined apps  *)
+(* that lists 'a' in its gossip friends set.                               *)
+(***************************************************************************)
 CountGossipOf(app, gossips, joinedApps) ==
     PT!ReduceSet(
         LAMBDA a, acc: acc + (IF app \in gossips[a] /\ joinedApps[a]
                               THEN 1 ELSE 0),
         APPS, 0)
 
+(***************************************************************************)
+(* The average of gossips is the average count over all joined apps        *)
+(* of the count of gossips for an app.                                     *)
+(***************************************************************************)
 AverageGossipOf(gossips, joinedApps) ==
     PT!ReduceSet(
         LAMBDA a, acc: acc + CountGossipOf(a, gossips, joinedApps),
         APPS, 0)
     \div
-    Cardinality(JoinedApps(joinedApps))
+    Cardinality(JoinedApps(joinedApps, APPS))
 
 ExistsRoute(from, to, _gossipFriends) ==
     LET f[<<app, visited>> \in APPS \X SUBSET APPS] ==
@@ -591,32 +662,37 @@ TypeOK ==
         /\ NoDuplicates(knownApps[a])
         \* Apps don't gossip themselves
         /\ gossipFriends[a] \subseteq (APPS -- a)
+    /\ takenIDs \subseteq IDs
+
+GossipInvariants ==
+    /\ \A a \in APPS: 
         \* Invariant when we're connected or not.
         /\ gossipFriends[a] /= {}
            <=> knownApps[a] /= <<a>>
-        (*******************************************************************)
-        (* Debug breakpoint for all apps 'a'.                              *)
-        (*******************************************************************)
-\*        \* a sync response has been sent
-\*        /\ (syncRespQueue[a] = <<>>
-\*            \* no shopy lists are empty 
-\*            \/ shopyList[a] = {})
-    /\ \A ja \in JoinedApps(joined): CountGossipOf(ja, gossipFriends, joined) = 0 \/ (
+    (***********************************************************************)
+    (* We verify that for every joined app, the count of any other joined  *)
+    (* app gossiping the new joiner is more or less in the average.        *)
+    (***********************************************************************)
+    /\ \A ja \in JoinedApps(joined, APPS): CountGossipOf(ja, gossipFriends, joined) = 0 \/ (
            /\ CountGossipOf(ja, gossipFriends, joined) >= AverageGossipOf(gossipFriends, joined) - 1
            /\ CountGossipOf(ja, gossipFriends, joined) <= AverageGossipOf(gossipFriends, joined) + 1
        )
-    /\ takenIDs \subseteq IDs
     
 Liveness ==
     \* At some point, someone has joined and gossips have been assigned.
-    /\ <>(\A ja \in JoinedApps(joined): joined[ja] /\ CountGossipOf(ja, gossipFriends, joined) > 0)
-    \* There's a route from every other connected app to a joined app.
+    /\ <>(\A ja \in JoinedApps(joined, APPS): joined[ja] /\ CountGossipOf(ja, gossipFriends, joined) > 0)
+    
     /\ \A a \in APPS:
-           joined[a]
-           ~> \A a2 \in {j \in (APPS -- a): joined[j]}: 
-                  ExistsRoute(a2, a, gossipFriends)
+           \* Joining leads to having a route from every other joined app to the joiner.
+           /\ joined[a]
+              ~> \A a2 \in JoinedApps(joined, APPS -- a): 
+                     ExistsRoute(a2, a, gossipFriends)
+           \* Joining leads to every other joined app adding the new joiner to its list of known apps.
+           /\ joined[a]
+              ~> \A a2 \in JoinedApps(joined, APPS -- a):
+                     a \in PT!Range(knownApps[a2])
 
 =============================================================================
 \* Modification History
-\* Last modified Wed Mar 17 13:38:18 CET 2021 by davd
+\* Last modified Wed Mar 17 23:42:41 CET 2021 by davd
 \* Created Tue Mar 02 12:33:43 CET 2021 by davd
