@@ -143,26 +143,29 @@ define
     (* Amongst 'knownApps', wisely choose an element different than 'app'. *)
     (***********************************************************************)
     PickGossipFriends(app, knownApps) ==
-        LET KnownApps ==
-                PT!ReduceSeq(
-                    LAMBDA a, acc: IF a = app THEN acc ELSE Append(acc, a),
-                    knownApps, <<>>)
-        
+        LET 
             Opposit ==
-                PT!Index(KnownApps, app) + (Len(KnownApps) \div 2) - (Len(KnownApps) % 2)
+                LET I == PT!Index(knownApps, app) IN
+                I - (Len(knownApps) \div 2) + 
+                (IF I < Len(knownApps) \div 2 THEN Len(knownApps) ELSE 0)
+            
+            KnownApps(exclude) == 
+                PT!ReduceSeq(
+                    LAMBDA a, acc: IF a \in exclude THEN acc ELSE Append(acc, a),
+                    knownApps, <<>>)
+            
+            Between(val, min, max) ==
+                PT!Max(min, PT!Min(max, val))
+                    
+            FirstGossip == LET ka == KnownApps({app}) IN
+                {ka[Between(Opposit - 1, 1, Len(ka))]}
+            
+            SecondGossip == LET ka == KnownApps({app} \union FirstGossip) IN
+                IF Len(ka) > 0
+                THEN {ka[Between(Opposit, 1, Len(ka))]}
+                ELSE {}
                 
-            PreviousIndex(i) ==
-                IF Len(KnownApps) < 3
-                THEN 1
-                ELSE IF i = 1 THEN Len(KnownApps) ELSE i - 1
-           
-            NextIndex(i) ==
-                IF Len(KnownApps) < 3
-                THEN Len(KnownApps)
-                ELSE IF i = Len(KnownApps) THEN 1 ELSE i + 1
-                
-        IN {KnownApps[PreviousIndex(Opposit)], 
-            KnownApps[NextIndex(Opposit)]}
+        IN FirstGossip \union SecondGossip
     
     (***********************************************************************)
     (* Merge two lists of apps together without duplicating                *)
@@ -233,6 +236,8 @@ end macro;
 (***************************************************************************)
 fair+ process ClientApp \in APPS
 variables
+    \* On network outage, an app can't pull new messages.
+    networkOutage = FALSE,
     joined = FALSE,
     gossipFriends = {},
     knownApps = <<self>>;
@@ -255,6 +260,9 @@ begin AppLoop:
                 joinReqQueue[a] := Append(joinReqQueue[a], NewJoinReqMsg(self));
             end with;
         or
+            \* NETWORK OUTAGE
+            networkOutage := TRUE;
+        or
             \* RESPOND TO JOIN REQUEST
             (***************************************************************)
             (* Any gate app receiving a join request will:                 *)
@@ -263,6 +271,7 @@ begin AppLoop:
             (*   - notify its gossip friends.                              *)
             (***************************************************************)
             if isGate[self] then
+                await ~networkOutage;
                 await joinReqQueue[self] /= <<>>;
                 with joinRequest = Head(joinReqQueue[self]),
                      updatedKnownApps = Append(knownApps, joinRequest.app)
@@ -280,7 +289,7 @@ begin AppLoop:
                     if joinRequest.app \notin PT!Range(knownApps)
                     then
                         knownApps := updatedKnownApps;
-                        gossipFriends := PickGossipFriends(self, updatedKnownApps);
+                        gossipFriends := PickGossipFriends(self, knownApps);
                     end if;
                     
                     \* NOTIFY NETWORK OF NEW JOINER
@@ -297,6 +306,7 @@ begin AppLoop:
             (* will have to update its known apps and pick gossip friends. *)
             (***************************************************************)
             await joinRespQueue[self] /= <<>>;
+            await ~networkOutage;
             with joinResponse = Head(joinRespQueue[self])
             do
                 \* PULL FROM RESP QUEUE      
@@ -306,7 +316,7 @@ begin AppLoop:
                 knownApps := MergeKnownApps(knownApps, joinResponse.knownHosts);
                 
                 \* PICK NEW GOSSIP FRIENDS
-                gossipFriends := PickGossipFriends(self, joinResponse.knownHosts);
+                gossipFriends := PickGossipFriends(self, knownApps);
                 
                 \* SET STATUS TO JOINED
                 joined := TRUE;
@@ -318,6 +328,7 @@ begin AppLoop:
             (* an app updates its known apps as well as its gossips.       *)
             (***************************************************************)
             await newJoinerNotif[self] /= <<>>;
+            await ~networkOutage;
             with joinNotifMsg = Head(newJoinerNotif[self])
             do
                 \* PULL FROM NOTIF QUEUE
@@ -355,8 +366,9 @@ begin AppLoop:
                 syncReqQueue[a] := Append(syncReqQueue[a], req);
             end with;
         or
-            \* RCV SYNC REQUEST
+            \* RECEIVE SYNC REQUEST
             await syncReqQueue[self] /= <<>>;
+            await ~networkOutage;
             with syncRequest = Head(syncReqQueue[self]),
                  mergeResult = shopyList[self] \union syncRequest.list,
                  newResp = NewSyncResp(self, mergeResult, syncRequest.id) 
@@ -368,8 +380,9 @@ begin AppLoop:
                 syncRespQueue[syncRequest.app] := Append(syncRespQueue[syncRequest.app], newResp);
             end with;
         or
-            \* RCV SYNC RESPONSE
+            \* RECEIVE SYNC RESPONSE
             await syncRespQueue[self] /= <<>>;
+            await ~networkOutage;
             with syncResponse = Head(syncRespQueue[self]),
                  mergeResult = shopyList[self] \union syncResponse.list 
             do
@@ -383,7 +396,7 @@ end process;
 
 end algorithm;
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "ec56fe87" /\ chksum(tla) = "38265ee0")
+\* BEGIN TRANSLATION (chksum(pcal) = "7a780ec0" /\ chksum(tla) = "e46ebe0c")
 VARIABLES isGate, shopyList, syncReqQueue, syncRespQueue, joinReqQueue, 
           joinRespQueue, newJoinerNotif, takenIDs
 
@@ -437,26 +450,29 @@ NewJoinerNotifReq(app) == [app |-> app]
 
 
 PickGossipFriends(app, knownApps) ==
-    LET KnownApps ==
+    LET
+        Opposit ==
+            LET I == PT!Index(knownApps, app) IN
+            I - (Len(knownApps) \div 2) +
+            (IF I < Len(knownApps) \div 2 THEN Len(knownApps) ELSE 0)
+
+        KnownApps(exclude) ==
             PT!ReduceSeq(
-                LAMBDA a, acc: IF a = app THEN acc ELSE Append(acc, a),
+                LAMBDA a, acc: IF a \in exclude THEN acc ELSE Append(acc, a),
                 knownApps, <<>>)
 
-        Opposit ==
-            PT!Index(KnownApps, app) + (Len(KnownApps) \div 2) - (Len(KnownApps) % 2)
+        Between(val, min, max) ==
+            PT!Max(min, PT!Min(max, val))
 
-        PreviousIndex(i) ==
-            IF Len(KnownApps) < 3
-            THEN 1
-            ELSE IF i = 1 THEN Len(KnownApps) ELSE i - 1
+        FirstGossip == LET ka == KnownApps({app}) IN
+            {ka[Between(Opposit - 1, 1, Len(ka))]}
 
-        NextIndex(i) ==
-            IF Len(KnownApps) < 3
-            THEN Len(KnownApps)
-            ELSE IF i = Len(KnownApps) THEN 1 ELSE i + 1
+        SecondGossip == LET ka == KnownApps({app} \union FirstGossip) IN
+            IF Len(ka) > 0
+            THEN {ka[Between(Opposit, 1, Len(ka))]}
+            ELSE {}
 
-    IN {KnownApps[PreviousIndex(Opposit)],
-        KnownApps[NextIndex(Opposit)]}
+    IN FirstGossip \union SecondGossip
 
 
 
@@ -507,11 +523,11 @@ MergeKnownApps(apps1, apps2) ==
                      ELSE IF Contains(acc, Head(l1)) THEN SkipOneL1 ELSE PickFromL1
     IN f[<<apps1, apps2, <<>>>>]
 
-VARIABLES joined, gossipFriends, knownApps
+VARIABLES networkOutage, joined, gossipFriends, knownApps
 
 vars == << isGate, shopyList, syncReqQueue, syncRespQueue, joinReqQueue, 
-           joinRespQueue, newJoinerNotif, takenIDs, joined, gossipFriends, 
-           knownApps >>
+           joinRespQueue, newJoinerNotif, takenIDs, networkOutage, joined, 
+           gossipFriends, knownApps >>
 
 ProcSet == (APPS)
 
@@ -525,6 +541,7 @@ Init == (* Global variables *)
         /\ newJoinerNotif = [a \in APPS |-> <<>>]
         /\ takenIDs = {}
         (* Process ClientApp *)
+        /\ networkOutage = [self \in APPS |-> FALSE]
         /\ joined = [self \in APPS |-> FALSE]
         /\ gossipFriends = [self \in APPS |-> {}]
         /\ knownApps = [self \in APPS |-> <<self>>]
@@ -532,9 +549,12 @@ Init == (* Global variables *)
 ClientApp(self) == /\ \/ /\ ~joined[self]
                          /\ \E a \in (GateApps -- self):
                               joinReqQueue' = [joinReqQueue EXCEPT ![a] = Append(joinReqQueue[a], NewJoinReqMsg(self))]
-                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinRespQueue, newJoinerNotif, takenIDs, joined, gossipFriends, knownApps>>
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinRespQueue, newJoinerNotif, takenIDs, networkOutage, joined, gossipFriends, knownApps>>
+                      \/ /\ networkOutage' = [networkOutage EXCEPT ![self] = TRUE]
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, newJoinerNotif, takenIDs, joined, gossipFriends, knownApps>>
                       \/ /\ IF isGate[self]
-                               THEN /\ joinReqQueue[self] /= <<>>
+                               THEN /\ ~networkOutage[self]
+                                    /\ joinReqQueue[self] /= <<>>
                                     /\ LET joinRequest == Head(joinReqQueue[self]) IN
                                          LET updatedKnownApps == Append(knownApps[self], joinRequest.app) IN
                                            /\ joinReqQueue' = [joinReqQueue EXCEPT ![self] = Tail(joinReqQueue[self])]
@@ -544,7 +564,7 @@ ClientApp(self) == /\ \/ /\ ~joined[self]
                                                                                                               LAMBDA app: app /= joinRequest.app)))]
                                            /\ IF joinRequest.app \notin PT!Range(knownApps[self])
                                                  THEN /\ knownApps' = [knownApps EXCEPT ![self] = updatedKnownApps]
-                                                      /\ gossipFriends' = [gossipFriends EXCEPT ![self] = PickGossipFriends(self, updatedKnownApps)]
+                                                      /\ gossipFriends' = [gossipFriends EXCEPT ![self] = PickGossipFriends(self, knownApps'[self])]
                                                  ELSE /\ TRUE
                                                       /\ UNCHANGED << gossipFriends, 
                                                                       knownApps >>
@@ -558,42 +578,46 @@ ClientApp(self) == /\ \/ /\ ~joined[self]
                                                     joinRespQueue, 
                                                     newJoinerNotif, joined, 
                                                     gossipFriends, knownApps >>
-                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, takenIDs>>
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, takenIDs, networkOutage>>
                       \/ /\ joinRespQueue[self] /= <<>>
+                         /\ ~networkOutage[self]
                          /\ LET joinResponse == Head(joinRespQueue[self]) IN
                               /\ joinRespQueue' = [joinRespQueue EXCEPT ![self] = Tail(joinRespQueue[self])]
                               /\ knownApps' = [knownApps EXCEPT ![self] = MergeKnownApps(knownApps[self], joinResponse.knownHosts)]
-                              /\ gossipFriends' = [gossipFriends EXCEPT ![self] = PickGossipFriends(self, joinResponse.knownHosts)]
+                              /\ gossipFriends' = [gossipFriends EXCEPT ![self] = PickGossipFriends(self, knownApps'[self])]
                               /\ joined' = [joined EXCEPT ![self] = TRUE]
-                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinReqQueue, newJoinerNotif, takenIDs>>
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinReqQueue, newJoinerNotif, takenIDs, networkOutage>>
                       \/ /\ newJoinerNotif[self] /= <<>>
+                         /\ ~networkOutage[self]
                          /\ LET joinNotifMsg == Head(newJoinerNotif[self]) IN
                               /\ newJoinerNotif' = [newJoinerNotif EXCEPT ![self] = Tail(newJoinerNotif[self])]
                               /\ knownApps' = [knownApps EXCEPT ![self] = MergeKnownApps(knownApps[self], <<joinNotifMsg.app>>)]
                               /\ gossipFriends' = [gossipFriends EXCEPT ![self] = PickGossipFriends(self, knownApps'[self])]
-                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, takenIDs, joined>>
+                         /\ UNCHANGED <<shopyList, syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, takenIDs, networkOutage, joined>>
                       \/ /\ Cardinality(shopyList[self]) < Cardinality(PRODUCTS)
                          /\ shopyList' = [shopyList EXCEPT ![self] = shopyList[self] ++ NewShopyItem(shopyList[self])]
-                         /\ UNCHANGED <<syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, newJoinerNotif, takenIDs, joined, gossipFriends, knownApps>>
+                         /\ UNCHANGED <<syncReqQueue, syncRespQueue, joinReqQueue, joinRespQueue, newJoinerNotif, takenIDs, networkOutage, joined, gossipFriends, knownApps>>
                       \/ /\ \E a \in (PT!Range(knownApps[self]) -- self):
                               LET req == NewSyncReq(self) IN
                                 /\ takenIDs' = takenIDs ++ req.id
                                 /\ syncReqQueue' = [syncReqQueue EXCEPT ![a] = Append(syncReqQueue[a], req)]
-                         /\ UNCHANGED <<shopyList, syncRespQueue, joinReqQueue, joinRespQueue, newJoinerNotif, joined, gossipFriends, knownApps>>
+                         /\ UNCHANGED <<shopyList, syncRespQueue, joinReqQueue, joinRespQueue, newJoinerNotif, networkOutage, joined, gossipFriends, knownApps>>
                       \/ /\ syncReqQueue[self] /= <<>>
+                         /\ ~networkOutage[self]
                          /\ LET syncRequest == Head(syncReqQueue[self]) IN
                               LET mergeResult == shopyList[self] \union syncRequest.list IN
                                 LET newResp == NewSyncResp(self, mergeResult, syncRequest.id) IN
                                   /\ syncReqQueue' = [syncReqQueue EXCEPT ![self] = Tail(syncReqQueue[self])]
                                   /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
                                   /\ syncRespQueue' = [syncRespQueue EXCEPT ![syncRequest.app] = Append(syncRespQueue[syncRequest.app], newResp)]
-                         /\ UNCHANGED <<joinReqQueue, joinRespQueue, newJoinerNotif, takenIDs, joined, gossipFriends, knownApps>>
+                         /\ UNCHANGED <<joinReqQueue, joinRespQueue, newJoinerNotif, takenIDs, networkOutage, joined, gossipFriends, knownApps>>
                       \/ /\ syncRespQueue[self] /= <<>>
+                         /\ ~networkOutage[self]
                          /\ LET syncResponse == Head(syncRespQueue[self]) IN
                               LET mergeResult == shopyList[self] \union syncResponse.list IN
                                 /\ shopyList' = [shopyList EXCEPT ![self] = mergeResult]
                                 /\ syncRespQueue' = [syncRespQueue EXCEPT ![self] = Tail(syncRespQueue[self])]
-                         /\ UNCHANGED <<syncReqQueue, joinReqQueue, joinRespQueue, newJoinerNotif, takenIDs, joined, gossipFriends, knownApps>>
+                         /\ UNCHANGED <<syncReqQueue, joinReqQueue, joinRespQueue, newJoinerNotif, takenIDs, networkOutage, joined, gossipFriends, knownApps>>
                    /\ UNCHANGED isGate
 
 Next == (\E self \in APPS: ClientApp(self))
@@ -666,6 +690,8 @@ TypeOK ==
 
 GossipInvariants ==
     /\ \A a \in APPS: 
+        \* Choose more than one gossip if have more than one known app.
+        /\ Cardinality(PT!Range(knownApps[a]) -- a) > 1 => Cardinality(gossipFriends[a]) > 1
         \* Invariant when we're connected or not.
         /\ gossipFriends[a] /= {}
            <=> knownApps[a] /= <<a>>
@@ -673,10 +699,12 @@ GossipInvariants ==
     (* We verify that for every joined app, the count of any other joined  *)
     (* app gossiping the new joiner is more or less in the average.        *)
     (***********************************************************************)
-    /\ \A ja \in JoinedApps(joined, APPS): CountGossipOf(ja, gossipFriends, joined) = 0 \/ (
-           /\ CountGossipOf(ja, gossipFriends, joined) >= AverageGossipOf(gossipFriends, joined) - 1
-           /\ CountGossipOf(ja, gossipFriends, joined) <= AverageGossipOf(gossipFriends, joined) + 1
-       )
+    /\ \A ja \in JoinedApps(joined, APPS): 
+        \/ (\E n \in JoinedApps(joined, APPS): newJoinerNotif[n] /= <<>>) 
+        \/ CountGossipOf(ja, gossipFriends, joined) = 0 
+        \/ (CountGossipOf(ja, gossipFriends, joined) >= AverageGossipOf(gossipFriends, joined) - 1
+            /\ CountGossipOf(ja, gossipFriends, joined) <= AverageGossipOf(gossipFriends, joined) + 1
+            )
     
 Liveness ==
     \* At some point, someone has joined and gossips have been assigned.
@@ -694,5 +722,5 @@ Liveness ==
 
 =============================================================================
 \* Modification History
-\* Last modified Wed Mar 17 23:42:41 CET 2021 by davd
+\* Last modified Fri Mar 19 12:44:19 CET 2021 by davd
 \* Created Tue Mar 02 12:33:43 CET 2021 by davd

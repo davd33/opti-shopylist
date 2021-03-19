@@ -12,16 +12,16 @@
     <stringAttribute key="distributedTLC" value="off"/>
     <stringAttribute key="distributedTLCVMArgs" value=""/>
     <intAttribute key="fpBits" value="1"/>
-    <intAttribute key="fpIndex" value="12"/>
+    <intAttribute key="fpIndex" value="50"/>
     <booleanAttribute key="fpIndexRandom" value="true"/>
-    <intAttribute key="maxHeapSize" value="80"/>
+    <intAttribute key="maxHeapSize" value="40"/>
     <intAttribute key="maxSetSize" value="1000000"/>
     <booleanAttribute key="mcMode" value="true"/>
     <stringAttribute key="modelBehaviorInit" value=""/>
     <stringAttribute key="modelBehaviorNext" value=""/>
     <stringAttribute key="modelBehaviorSpec" value="Spec"/>
     <intAttribute key="modelBehaviorSpecType" value="1"/>
-    <stringAttribute key="modelBehaviorVars" value="isGate, knownApps, joinReqQueue, takenIDs, newJoinerNotif, shopyList, joined, gossipFriends, syncRespQueue, joinRespQueue, syncReqQueue"/>
+    <stringAttribute key="modelBehaviorVars" value="isGate, networkOutage, knownApps, joinReqQueue, takenIDs, newJoinerNotif, shopyList, joined, gossipFriends, syncRespQueue, joinRespQueue, syncReqQueue"/>
     <stringAttribute key="modelComments" value=""/>
     <booleanAttribute key="modelCorrectnessCheckDeadlock" value="true"/>
     <listAttribute key="modelCorrectnessInvariants">
@@ -33,10 +33,10 @@
         <listEntry value="1Liveness"/>
     </listAttribute>
     <intAttribute key="modelEditorOpenTabs" value="14"/>
-    <stringAttribute key="modelExpressionEval" value="PickGossipFriends(&quot;a1&quot;, &lt;&lt;&quot;a1&quot;, &quot;a2&quot;&gt;&gt;)"/>
+    <stringAttribute key="modelExpressionEval" value="3 \div 2 + IF 3 % 2 = 0 THEN 0 ELSE 1"/>
     <stringAttribute key="modelParameterActionConstraint" value=""/>
     <listAttribute key="modelParameterConstants">
-        <listEntry value="APPS;;{a1, a2, a3};1;0"/>
+        <listEntry value="APPS;;{a1, a2, a3, a4};1;0"/>
         <listEntry value="IDs;;1..10;0;0"/>
         <listEntry value="PRODUCTS;;{banane, orange};1;0"/>
         <listEntry value="GATEAPPS;;{a1};0;0"/>
@@ -46,18 +46,19 @@
     <stringAttribute key="modelParameterModelValues" value="{}"/>
     <stringAttribute key="modelParameterNewDefinitions" value=""/>
     <intAttribute key="modelVersion" value="20191005"/>
-    <intAttribute key="numberOfWorkers" value="12"/>
+    <intAttribute key="numberOfWorkers" value="8"/>
     <booleanAttribute key="recover" value="false"/>
     <stringAttribute key="result.mail.address" value=""/>
     <intAttribute key="simuAril" value="-1"/>
     <intAttribute key="simuDepth" value="100"/>
     <intAttribute key="simuSeed" value="-1"/>
     <stringAttribute key="specName" value="OptiShopyList"/>
-    <stringAttribute key="tlcResourcesProfile" value="local most"/>
+    <stringAttribute key="tlcResourcesProfile" value="local nomal"/>
     <listAttribute key="traceExploreExpressions">
-        <listEntry value="1newJoinerNotif[a2] /= &lt;&lt;&gt;&gt;"/>
-        <listEntry value="1IF newJoinerNotif[a2] /= &lt;&lt;&gt;&gt;&#10;THEN Head(newJoinerNotif[a2])&#10;ELSE FALSE"/>
-        <listEntry value="1IF newJoinerNotif[a2] /= &lt;&lt;&gt;&gt;&#10;THEN Tail(newJoinerNotif[a2])&#10;ELSE FALSE"/>
+        <listEntry value="0newJoinerNotif[a2] /= &lt;&lt;&gt;&gt;"/>
+        <listEntry value="0IF newJoinerNotif[a2] /= &lt;&lt;&gt;&gt;&#10;THEN Head(newJoinerNotif[a2])&#10;ELSE FALSE"/>
+        <listEntry value="0IF newJoinerNotif[a2] /= &lt;&lt;&gt;&gt;&#10;THEN Tail(newJoinerNotif[a2])&#10;ELSE FALSE"/>
+        <listEntry value="1{&lt;&lt;ja,CountGossipOf(ja, gossipFriends, joined)&gt;&gt;: ja \in JoinedApps(joined, APPS)}"/>
     </listAttribute>
     <stringAttribute key="view" value=""/>
     <booleanAttribute key="visualizeStateGraph" value="false"/>
